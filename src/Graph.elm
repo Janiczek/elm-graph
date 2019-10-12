@@ -1,6 +1,6 @@
 module Graph exposing
     ( Graph, empty
-    , addVertex, removeVertex, addEdge, removeEdge
+    , addVertex, removeVertex, updateVertex, addEdge, removeEdge
     , hasVertex, hasEdge, areAdjacent
     , vertices, edges, outgoingEdges
     )
@@ -15,7 +15,7 @@ module Graph exposing
 
 # Modification
 
-@docs addVertex, removeVertex, addEdge, removeEdge
+@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge
 
 
 # Predicates
@@ -27,6 +27,7 @@ module Graph exposing
 
 @docs vertices, edges, outgoingEdges
 
+  - TODO measure performance
   - TODO neighbours function (outgoing AND incoming edges)
   - TODO union, intersect, difference? maybe?
   - TODO some helper function for getting ID of vertex, and getting vertex of ID
@@ -175,6 +176,33 @@ removeVertex vertex ((Graph g) as graph) =
                         , vertices = Dict.remove vertex g.vertices
                         , verticesById = Dict.remove id g.verticesById
                     }
+            )
+        |> Maybe.withDefault graph
+
+
+{-| Updates the vertex data. Does nothing if the vertex is not present.
+-}
+updateVertex : vertex -> (vertex -> vertex) -> Graph vertex -> Graph vertex
+updateVertex vertex fn ((Graph g) as graph) =
+    Dict.get vertex g.vertices
+        |> Maybe.map
+            (\id ->
+                let
+                    new =
+                        fn vertex
+                in
+                graph
+                    |> removeVertex new
+                    |> (\(Graph g_) ->
+                            Graph
+                                { g_
+                                    | vertices =
+                                        g_.vertices
+                                            |> Dict.remove vertex
+                                            |> Dict.insert new id
+                                    , verticesById = Dict.update id (Maybe.map (always new)) g_.verticesById
+                                }
+                       )
             )
         |> Maybe.withDefault graph
 

@@ -47,10 +47,11 @@ type alias Model =
 
 
 type Msg
-    = AddEdge String String
-    | RemoveEdge String String
-    | AddVertex String
+    = AddVertex String
     | RemoveVertex String
+    | UpdateVertex String String
+    | AddEdge String String
+    | RemoveEdge String String
 
 
 app : ArchitectureTest.TestedApp Model Msg
@@ -73,33 +74,39 @@ app =
 update : Msg -> Model -> Model
 update msg graph =
     case msg of
-        AddEdge from to ->
-            Graph.addEdge from to graph
-
-        RemoveEdge from to ->
-            Graph.removeEdge from to graph
-
         AddVertex vertex ->
             Graph.addVertex vertex graph
 
         RemoveVertex vertex ->
             Graph.removeVertex vertex graph
 
+        UpdateVertex before after ->
+            Graph.updateVertex before (always after) graph
+
+        AddEdge from to ->
+            Graph.addEdge from to graph
+
+        RemoveEdge from to ->
+            Graph.removeEdge from to graph
+
 
 msgToString : Msg -> String
 msgToString msg =
     case msg of
-        AddEdge from to ->
-            "AddEdge " ++ Debug.toString from ++ " " ++ Debug.toString to
-
-        RemoveEdge from to ->
-            "RemoveEdge " ++ Debug.toString from ++ " " ++ Debug.toString to
-
         AddVertex vertex ->
             "AddVertex " ++ Debug.toString vertex
 
         RemoveVertex vertex ->
             "RemoveVertex " ++ Debug.toString vertex
+
+        UpdateVertex before after ->
+            "UpdateVertex " ++ Debug.toString before ++ " " ++ Debug.toString after
+
+        AddEdge from to ->
+            "AddEdge " ++ Debug.toString from ++ " " ++ Debug.toString to
+
+        RemoveEdge from to ->
+            "RemoveEdge " ++ Debug.toString from ++ " " ++ Debug.toString to
 
 
 modelToString : Model -> String
@@ -129,16 +136,6 @@ vertexFuzzer =
         ]
 
 
-addEdgeFuzzer : Fuzzer Msg
-addEdgeFuzzer =
-    Fuzz.map2 AddEdge vertexFuzzer vertexFuzzer
-
-
-removeEdgeFuzzer : Fuzzer Msg
-removeEdgeFuzzer =
-    Fuzz.map2 RemoveEdge vertexFuzzer vertexFuzzer
-
-
 addVertexFuzzer : Fuzzer Msg
 addVertexFuzzer =
     Fuzz.map AddVertex vertexFuzzer
@@ -149,13 +146,29 @@ removeVertexFuzzer =
     Fuzz.map RemoveVertex vertexFuzzer
 
 
+updateVertexFuzzer : Fuzzer Msg
+updateVertexFuzzer =
+    Fuzz.map2 UpdateVertex vertexFuzzer vertexFuzzer
+
+
+addEdgeFuzzer : Fuzzer Msg
+addEdgeFuzzer =
+    Fuzz.map2 AddEdge vertexFuzzer vertexFuzzer
+
+
+removeEdgeFuzzer : Fuzzer Msg
+removeEdgeFuzzer =
+    Fuzz.map2 RemoveEdge vertexFuzzer vertexFuzzer
+
+
 msgFuzzer : Fuzzer Msg
 msgFuzzer =
     Fuzz.oneOf
-        [ addEdgeFuzzer
-        , removeEdgeFuzzer
-        , addVertexFuzzer
+        [ addVertexFuzzer
         , removeVertexFuzzer
+        , updateVertexFuzzer
+        , addEdgeFuzzer
+        , removeEdgeFuzzer
         ]
 
 
@@ -228,6 +241,24 @@ suite =
                     in
                     if Graph.hasVertex removedVertex initGraph then
                         Expect.pass
+
+                    else
+                        finalGraph
+                            |> Expect.equal initGraph
+            ]
+        , describe "updateVertex"
+            [ msgTest "results in hasVertex updated == True if initial vertex was present" app updateVertexFuzzer <|
+                \initGraph msg finalGraph ->
+                    let
+                        vertex =
+                            vertexInMsg msg
+
+                        updatedVertex =
+                            updatedVertexInMsg msg
+                    in
+                    if Graph.hasVertex vertex initGraph then
+                        Graph.hasVertex updatedVertex finalGraph
+                            |> Expect.true ""
 
                     else
                         finalGraph
@@ -447,6 +478,20 @@ vertexInMsg msg =
             vertex
 
         RemoveVertex vertex ->
+            vertex
+
+        UpdateVertex vertex _ ->
+            vertex
+
+        _ ->
+            -- shouldn't happen
+            ""
+
+
+updatedVertexInMsg : Msg -> String
+updatedVertexInMsg msg =
+    case msg of
+        UpdateVertex _ vertex ->
             vertex
 
         _ ->
