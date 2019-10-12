@@ -225,10 +225,10 @@ ecc-jsbn@~0.1.1:
     jsbn "~0.1.0"
     safer-buffer "^2.1.0"
 
-elm-test@^0.19.1-beta1:
-  version "0.19.1-beta1"
-  resolved "https://registry.yarnpkg.com/elm-test/-/elm-test-0.19.1-beta1.tgz#89129e1e8d68679ca0ba4c2342bfd6a59af2a864"
-  integrity sha512-69mtaB/IhSXnREiUPGCYZwsbInMC7Ul9k89DiS1Thm7cOiOWy7zkTlWCmshPSlGRwr5qVyWnJZrxSbD4F/DYLQ==
+elm-test@^0.19.1-beta2:
+  version "0.19.1-beta2"
+  resolved "https://registry.yarnpkg.com/elm-test/-/elm-test-0.19.1-beta2.tgz#16a2460da00838db3b1feed3c8dad13fa2fe9fb8"
+  integrity sha512-GL8kKGGeCOgz5ntI51/V0uvtE+m4MUX+0ot+6ecGJcrARMF0dKEMigW+EX/gIhjhUeUCW8CBASfku9DBiAn/Sw==
   dependencies:
     chalk "2.4.2"
     chokidar "3.2.0"
