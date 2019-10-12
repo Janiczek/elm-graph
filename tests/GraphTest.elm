@@ -164,7 +164,47 @@ msgFuzzer =
 suite : Test
 suite =
     describe "Graph"
-        [ describe "hasVertex"
+        [ describe "empty"
+            [ test "has zero vertices" <|
+                \() ->
+                    Graph.empty
+                        |> Graph.vertices
+                        |> Expect.equalLists []
+            , test "has zero edges" <|
+                \() ->
+                    Graph.empty
+                        |> Graph.edges
+                        |> Expect.equalLists []
+            ]
+        , describe "addVertex"
+            [ todo "write tests"
+            ]
+        , describe "removeVertex"
+            [ msgTest "removes all outgoing edges"
+                app
+                removeVertexFuzzer
+              <|
+                \_ msg finalGraph ->
+                    let
+                        removedVertex =
+                            vertexInMsg msg
+                    in
+                    Graph.vertices finalGraph
+                        |> List.all (\otherVertex -> not <| Graph.hasEdge removedVertex otherVertex finalGraph)
+                        |> Expect.true ""
+            , todo "removes all incoming edges"
+            , todo "architecture msg test: removeVertex v -> hasVertex v == False"
+            ]
+        , describe "addEdge"
+            [ todo "adds `from` vertex if it isn't present"
+            , todo "adds `to` vertex if it isn't present"
+            , todo "fuzz: if addEdge, then hasEdge = True"
+            , todo "fuzz: is a no-op if the edge already exists"
+            ]
+        , describe "removeEdge"
+            [ todo "write tests"
+            ]
+        , describe "hasVertex"
             [ test "returns True if the vertex is present" <|
                 \() ->
                     Graph.hasVertex "foo" graphWithFoo
@@ -196,12 +236,6 @@ suite =
                     Graph.hasEdge "foo" "bar" graphWithFooBarWithReverseEdge
                         |> Expect.false ""
             ]
-        , describe "addEdge"
-            [ todo "adds `from` vertex if it isn't present"
-            , todo "adds `to` vertex if it isn't present"
-            , todo "fuzz: if addEdge, then hasEdge = True"
-            , todo "fuzz: is a no-op if the edge already exists"
-            ]
         , describe "areAdjacent"
             [ todo "architecture msg test: order doesn't matter"
             , todo "works when the `from` vertex has single edge"
@@ -211,6 +245,20 @@ suite =
                 \() ->
                     Graph.areAdjacent "bar" "baz" graphWithFoo
                         |> Expect.false ""
+            ]
+        , describe "vertices"
+            [ test "returns empty list for empty graph" <|
+                \() ->
+                    Graph.vertices Graph.empty
+                        |> Expect.equalLists []
+            , todo "rest of tests"
+            ]
+        , describe "edges"
+            [ test "returns empty list for empty graph" <|
+                \() ->
+                    Graph.vertices Graph.empty
+                        |> Expect.equalLists []
+            , todo "rest of tests"
             ]
         , describe "outgoingEdges"
             [ test "returns empty list if vertex isn't present" <|
@@ -227,26 +275,35 @@ suite =
                         |> Expect.equalLists [ "bar" ]
             , todo "is directed"
             ]
-        , describe "removeVertex"
-            [ msgTest "removes all outgoing edges"
-                app
-                removeVertexFuzzer
-              <|
-                \_ msg finalGraph ->
-                    let
-                        removedVertex =
-                            case msg of
-                                RemoveVertex vertex ->
-                                    vertex
-
-                                _ ->
-                                    -- shouldn't happen
-                                    ""
-                    in
-                    Graph.vertices finalGraph
-                        |> List.all (\otherVertex -> not <| Graph.hasEdge removedVertex otherVertex finalGraph)
-                        |> Expect.true ""
-            , todo "removes all incoming edges"
-            , todo "architecture msg test: removeVertex v -> hasVertex v == False"
+        , describe "neighbours"
+            [ todo "define tests"
             ]
         ]
+
+
+vertexInMsg : Msg -> String
+vertexInMsg msg =
+    case msg of
+        AddVertex vertex ->
+            vertex
+
+        RemoveVertex vertex ->
+            vertex
+
+        _ ->
+            -- shouldn't happen
+            ""
+
+
+edgeInMsg : Msg -> ( String, String )
+edgeInMsg msg =
+    case msg of
+        AddEdge from to ->
+            ( from, to )
+
+        RemoveEdge from to ->
+            ( from, to )
+
+        _ ->
+            -- shouldn't happen
+            ( "", "" )

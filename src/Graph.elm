@@ -1,7 +1,7 @@
 module Graph exposing
     ( Graph, empty
-    , addEdge, removeEdge, addVertex, removeVertex
-    , hasEdge, hasVertex, areAdjacent
+    , addVertex, removeVertex, addEdge, removeEdge
+    , hasVertex, hasEdge, areAdjacent
     , vertices, edges, outgoingEdges, neighbours
     )
 
@@ -15,18 +15,19 @@ module Graph exposing
 
 # Modification
 
-@docs addEdge, removeEdge, addVertex, removeVertex
+@docs addVertex, removeVertex, addEdge, removeEdge
 
 
 # Predicates
 
-@docs hasEdge, hasVertex, areAdjacent
+@docs hasVertex, hasEdge, areAdjacent
 
 
 # Querying
 
 @docs vertices, edges, outgoingEdges, neighbours
 
+  - TODO union, intersect, difference? maybe?
   - TODO some helper function for getting ID of vertex, and getting vertex of ID
   - TODO undirected variant, simpler API
   - TODO module documentation
