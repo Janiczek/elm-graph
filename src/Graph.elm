@@ -2,7 +2,7 @@ module Graph exposing
     ( Graph, empty
     , addVertex, removeVertex, addEdge, removeEdge
     , hasVertex, hasEdge, areAdjacent
-    , vertices, edges, outgoingEdges, neighbours
+    , vertices, edges, outgoingEdges
     )
 
 {-|
@@ -25,8 +25,9 @@ module Graph exposing
 
 # Querying
 
-@docs vertices, edges, outgoingEdges, neighbours
+@docs vertices, edges, outgoingEdges
 
+  - TODO neighbours function (outgoing AND incoming edges)
   - TODO union, intersect, difference? maybe?
   - TODO some helper function for getting ID of vertex, and getting vertex of ID
   - TODO undirected variant, simpler API
@@ -133,18 +134,6 @@ outgoingEdges vertex (Graph g) =
         |> Maybe.withDefault []
 
 
-{-| Lists all vertices which share an edge with the given vertex.
-
-Undirected - the edge can go _from_ the given vertex or _to_ the given vertex.
-
-TODO do we want this? what to hold in memory to make this easier?
-
--}
-neighbours : vertex -> Graph vertex -> List vertex
-neighbours vertex (Graph g) =
-    Debug.todo "neighbours"
-
-
 {-| Add the vertex to the graph. (Nothing happens if it's already present.)
 
 By default it's not connected to any other vertex.
@@ -214,37 +203,33 @@ addEdge from to graph =
 -}
 addEdge_ : vertex -> vertex -> Graph vertex -> Graph vertex
 addEdge_ from to ((Graph g) as graph) =
-    if hasEdge from to graph then
-        graph
+    let
+        maybeFromId =
+            Dict.get from g.vertices
 
-    else
-        let
-            maybeFromId =
-                Dict.get from g.vertices
+        maybeToId =
+            Dict.get to g.vertices
+    in
+    Maybe.map2
+        (\fromId toId ->
+            Graph
+                { g
+                    | edges =
+                        Dict.update fromId
+                            (\maybeEdgesFrom ->
+                                case maybeEdgesFrom of
+                                    Nothing ->
+                                        Just (Set.singleton toId)
 
-            maybeToId =
-                Dict.get to g.vertices
-        in
-        Maybe.map2
-            (\fromId toId ->
-                Graph
-                    { g
-                        | edges =
-                            Dict.update fromId
-                                (\maybeEdgesFrom ->
-                                    case maybeEdgesFrom of
-                                        Nothing ->
-                                            Just (Set.singleton toId)
-
-                                        Just edgesFrom ->
-                                            Just (Set.insert toId edgesFrom)
-                                )
-                                g.edges
-                    }
-            )
-            maybeFromId
-            maybeToId
-            |> Maybe.withDefault graph
+                                    Just edgesFrom ->
+                                        Just (Set.insert toId edgesFrom)
+                            )
+                            g.edges
+                }
+        )
+        maybeFromId
+        maybeToId
+        |> Maybe.withDefault graph
 
 
 {-| Remove an edge from the first vertex to the second one.

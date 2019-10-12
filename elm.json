@@ -22,7 +22,8 @@
     "test-dependencies": {
         "direct": {
             "Janiczek/architecture-test": "2.0.1",
-            "elm-explorations/test": "1.2.2"
+            "elm-explorations/test": "1.2.2",
+            "elm-community/list-extra": "8.2.2"
         },
         "indirect": {
             "elm/random": "1.0.0"
