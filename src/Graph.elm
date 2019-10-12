@@ -1,7 +1,7 @@
 module Graph exposing
     ( Graph, empty
     , addVertex, removeVertex, updateVertex, addEdge, removeEdge
-    , hasVertex, hasEdge, areAdjacent
+    , isEmpty, hasVertex, hasEdge, areAdjacent
     , vertices, edges, outgoingEdges
     )
 
@@ -20,7 +20,7 @@ module Graph exposing
 
 # Predicates
 
-@docs hasVertex, hasEdge, areAdjacent
+@docs isEmpty, hasVertex, hasEdge, areAdjacent
 
 
 # Querying
@@ -72,6 +72,15 @@ empty =
         }
 
 
+{-| Is the graph empty?
+-}
+isEmpty : Graph vertex -> Bool
+isEmpty (Graph g) =
+    Dict.isEmpty g.vertices
+
+
+{-| TODO
+-}
 hasVertex : vertex -> Graph vertex -> Bool
 hasVertex vertex (Graph g) =
     Dict.member vertex g.vertices

@@ -329,6 +329,16 @@ suite =
                         finalGraph
                             |> Expect.equal initGraph
             ]
+        , describe "isEmpty"
+            [ invariantTest "only True if no vertices" app <|
+                \_ _ finalGraph ->
+                    if List.isEmpty (Graph.vertices finalGraph) then
+                        Graph.isEmpty finalGraph
+                            |> Expect.true ""
+
+                    else
+                        Expect.pass
+            ]
         , describe "hasVertex"
             [ test "returns True if the vertex is present" <|
                 \() ->
@@ -360,6 +370,28 @@ suite =
                 \() ->
                     Graph.hasEdge "foo" "bar" graphWithFooBarWithReverseEdge
                         |> Expect.false ""
+            , invariantTest "hasEdge implies hasVertex" app <|
+                \_ _ finalGraph ->
+                    let
+                        vertices =
+                            Graph.vertices finalGraph
+                    in
+                    List.Extra.cartesianProduct [ vertices, vertices ]
+                        |> List.all
+                            (\vs ->
+                                case vs of
+                                    [ v1, v2 ] ->
+                                        if Graph.hasEdge v1 v2 finalGraph then
+                                            Graph.hasVertex v1 finalGraph
+                                                && Graph.hasVertex v2 finalGraph
+
+                                        else
+                                            True
+
+                                    _ ->
+                                        False
+                            )
+                        |> Expect.true ""
             ]
         , describe "areAdjacent"
             [ invariantTest "order doesn't matter" app <|
