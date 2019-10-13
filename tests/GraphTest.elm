@@ -66,7 +66,7 @@ app =
             ]
     , update = ArchitectureTest.UpdateWithoutCmds update
     , msgFuzzer = msgFuzzer
-    , msgToString = msgToString
+    , msgToString = Debug.toString
     , modelToString = modelToString
     }
 
@@ -88,25 +88,6 @@ update msg graph =
 
         RemoveEdge from to ->
             Graph.removeEdge from to graph
-
-
-msgToString : Msg -> String
-msgToString msg =
-    case msg of
-        AddVertex vertex ->
-            "AddVertex " ++ Debug.toString vertex
-
-        RemoveVertex vertex ->
-            "RemoveVertex " ++ Debug.toString vertex
-
-        UpdateVertex before after ->
-            "UpdateVertex " ++ Debug.toString before ++ " " ++ Debug.toString after
-
-        AddEdge from to ->
-            "AddEdge " ++ Debug.toString from ++ " " ++ Debug.toString to
-
-        RemoveEdge from to ->
-            "RemoveEdge " ++ Debug.toString from ++ " " ++ Debug.toString to
 
 
 modelToString : Model -> String
