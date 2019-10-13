@@ -1,6 +1,6 @@
 module Graph exposing
     ( Graph, Edge, empty, fromVerticesAndEdges
-    , addVertex, removeVertex, updateVertex, addEdge, removeEdge
+    , addVertex, removeVertex, updateVertex, addEdge, removeEdge, fold
     , isEmpty, hasVertex, hasEdge, areAdjacent
     , size, vertices, edges, outgoingEdges, edgeToComparable
     )
@@ -15,7 +15,7 @@ module Graph exposing
 
 # Modification
 
-@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge
+@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge, fold
 
 
 # Predicates
@@ -320,6 +320,13 @@ removeEdge { from, to } ((Graph g) as graph) =
         (Dict.get from g.vertices)
         (Dict.get to g.vertices)
         |> Maybe.withDefault graph
+
+
+{-| Fold a function over all the vertices, starting with the "oldest" vertices.
+-}
+fold : (vertex -> acc -> acc) -> acc -> Graph vertex -> acc
+fold fn acc (Graph g) =
+    Dict.foldr (always fn) acc g.verticesById
 
 
 {-| TODO

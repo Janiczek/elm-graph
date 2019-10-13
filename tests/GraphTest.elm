@@ -347,6 +347,15 @@ suite =
                         finalGraph
                             |> Expect.equal initGraph
             ]
+        , describe "fold"
+            [ test "starts with the oldest vertices" <|
+                \() ->
+                    Graph.empty
+                        |> Graph.addVertex "foo"
+                        |> Graph.addVertex "bar"
+                        |> Graph.fold (\vertex acc -> acc ++ vertex) ""
+                        |> Expect.equal "foobar"
+            ]
         , describe "isEmpty"
             [ invariantTest "only True if no vertices" app <|
                 \_ _ finalGraph ->
