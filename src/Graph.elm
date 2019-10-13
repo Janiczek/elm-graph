@@ -1,8 +1,8 @@
 module Graph exposing
-    ( Graph, empty
+    ( Graph, Edge, empty, fromVerticesAndEdges
     , addVertex, removeVertex, updateVertex, addEdge, removeEdge
     , isEmpty, hasVertex, hasEdge, areAdjacent
-    , size, vertices, edges, outgoingEdges
+    , size, vertices, edges, outgoingEdges, edgeToComparable
     )
 
 {-|
@@ -10,7 +10,7 @@ module Graph exposing
 
 # Construction
 
-@docs Graph, empty
+@docs Graph, Edge, empty, fromVerticesAndEdges
 
 
 # Modification
@@ -25,8 +25,10 @@ module Graph exposing
 
 # Querying
 
-@docs size, vertices, edges, outgoingEdges
+@docs size, vertices, edges, outgoingEdges, edgeToComparable
 
+  - TODO `{from:v,to:v}` vs `v v` in arguments... make consistent?
+  - TODO maybe naming - member instead of hasVertex? what about hasEdge then?
   - TODO measure performance
   - TODO neighbours function (outgoing AND incoming edges)
   - TODO union, intersect, difference? maybe?
@@ -49,6 +51,8 @@ import Maybe.Extra
 import Set exposing (Set)
 
 
+{-| TODO
+-}
 type Graph vertex
     = Graph
         { -- TODO maybe use elm-community/intdict too
@@ -58,6 +62,14 @@ type Graph vertex
         , verticesById : Dict Int vertex
         , unusedId : Int
         }
+
+
+{-| TODO
+-}
+type alias Edge vertex =
+    { from : vertex
+    , to : vertex
+    }
 
 
 {-| An empty graph.
@@ -70,6 +82,18 @@ empty =
         , verticesById = Dict.empty
         , unusedId = 0
         }
+
+
+{-| Construct a graph from a list of vertices and a list of edges.
+
+Adds any vertices if they are present in the edges list but not in the vertices list.
+
+-}
+fromVerticesAndEdges : List vertex -> List (Edge vertex) -> Graph vertex
+fromVerticesAndEdges vertices_ edges_ =
+    empty
+        |> (\graph -> List.foldl addEdge graph edges_)
+        |> (\graph -> List.foldl addVertex graph vertices_)
 
 
 {-| Is the graph empty?
@@ -88,8 +112,8 @@ hasVertex vertex (Graph g) =
 
 {-| Directed variant of `areAdjacent`
 -}
-hasEdge : vertex -> vertex -> Graph vertex -> Bool
-hasEdge from to (Graph g) =
+hasEdge : Edge vertex -> Graph vertex -> Bool
+hasEdge { from, to } (Graph g) =
     let
         maybeEdgesFrom =
             Dict.get from g.vertices
@@ -111,7 +135,8 @@ Undirected - the order of the two vertices doesn't matter.
 -}
 areAdjacent : vertex -> vertex -> Graph vertex -> Bool
 areAdjacent v1 v2 graph =
-    hasEdge v1 v2 graph || hasEdge v2 v1 graph
+    hasEdge { from = v1, to = v2 } graph
+        || hasEdge { from = v2, to = v1 } graph
 
 
 {-| Lists all vertices which to which the given vertex "points".
@@ -124,12 +149,13 @@ Directed - the edge can only go _from_ the given vertex.
      []
 
      Graph.empty
-         |> Graph.addEdge "foo" "bar"
+         |> Graph.addEdge {from = "foo", to = "bar"}
          |> Graph.outgoingEdges "foo"
      -->
      [ "bar" ]
 
 TODO rethink naming?
+TODO or return List (Edge vertex)?
 
 -}
 outgoingEdges : vertex -> Graph vertex -> List vertex
@@ -216,30 +242,26 @@ updateVertex vertex fn ((Graph g) as graph) =
         |> Maybe.withDefault graph
 
 
-{-| Add an edge from the first vertex to the second one.
+{-| Add an edge to the graph.
 
 If any of the vertices aren't present yet, this function **will add them** before
 adding the edge.
 
-Directed - the order of the vertices matters!
-
 TODO example
-TODO think about {from: vertex, to: vertex} API
-TODO think about (vertex, vertex) API
 
 -}
-addEdge : vertex -> vertex -> Graph vertex -> Graph vertex
-addEdge from to graph =
+addEdge : Edge vertex -> Graph vertex -> Graph vertex
+addEdge ({ from, to } as edge) graph =
     graph
         |> addVertex from
         |> addVertex to
-        |> addEdge_ from to
+        |> addEdge_ edge
 
 
 {-| A helper for `addEdge` that doesn't check if the vertices are present.
 -}
-addEdge_ : vertex -> vertex -> Graph vertex -> Graph vertex
-addEdge_ from to ((Graph g) as graph) =
+addEdge_ : Edge vertex -> Graph vertex -> Graph vertex
+addEdge_ { from, to } ((Graph g) as graph) =
     let
         maybeFromId =
             Dict.get from g.vertices
@@ -273,15 +295,11 @@ addEdge_ from to ((Graph g) as graph) =
 
 If the edge is not present, nothing happens.
 
-Directed - the order of the vertices matters!
-
 TODO example
-TODO think about {from: vertex, to: vertex} API
-TODO think about (vertex, vertex) API
 
 -}
-removeEdge : vertex -> vertex -> Graph vertex -> Graph vertex
-removeEdge from to ((Graph g) as graph) =
+removeEdge : Edge vertex -> Graph vertex -> Graph vertex
+removeEdge { from, to } ((Graph g) as graph) =
     Maybe.map2
         (\fromId toId ->
             Graph
@@ -343,3 +361,10 @@ edges (Graph g) =
             )
         |> Maybe.Extra.combine
         |> Maybe.withDefault []
+
+
+{-| TODO
+-}
+edgeToComparable : Edge comparable -> ( comparable, comparable )
+edgeToComparable { from, to } =
+    ( from, to )
