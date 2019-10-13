@@ -117,39 +117,23 @@ vertexFuzzer =
         ]
 
 
-addVertexFuzzer : Fuzzer Msg
-addVertexFuzzer =
-    Fuzz.map AddVertex vertexFuzzer
-
-
-removeVertexFuzzer : Fuzzer Msg
-removeVertexFuzzer =
-    Fuzz.map RemoveVertex vertexFuzzer
-
-
-updateVertexFuzzer : Fuzzer Msg
-updateVertexFuzzer =
-    Fuzz.map2 UpdateVertex vertexFuzzer vertexFuzzer
-
-
-addEdgeFuzzer : Fuzzer Msg
-addEdgeFuzzer =
-    Fuzz.map2 AddEdge vertexFuzzer vertexFuzzer
-
-
-removeEdgeFuzzer : Fuzzer Msg
-removeEdgeFuzzer =
-    Fuzz.map2 RemoveEdge vertexFuzzer vertexFuzzer
+msgFuzzers =
+    { addVertex = Fuzz.map AddVertex vertexFuzzer
+    , removeVertex = Fuzz.map RemoveVertex vertexFuzzer
+    , updateVertex = Fuzz.map2 UpdateVertex vertexFuzzer vertexFuzzer
+    , addEdge = Fuzz.map2 AddEdge vertexFuzzer vertexFuzzer
+    , removeEdge = Fuzz.map2 RemoveEdge vertexFuzzer vertexFuzzer
+    }
 
 
 msgFuzzer : Fuzzer Msg
 msgFuzzer =
     Fuzz.oneOf
-        [ addVertexFuzzer
-        , removeVertexFuzzer
-        , updateVertexFuzzer
-        , addEdgeFuzzer
-        , removeEdgeFuzzer
+        [ msgFuzzers.addVertex
+        , msgFuzzers.removeVertex
+        , msgFuzzers.updateVertex
+        , msgFuzzers.addEdge
+        , msgFuzzers.removeEdge
         ]
 
 
@@ -173,16 +157,16 @@ suite =
                         |> Expect.equalLists []
             ]
         , describe "addVertex"
-            [ msgTest "results in hasVertex v == True" app addVertexFuzzer <|
+            [ msgTest "results in hasVertex v == True" app msgFuzzers.addVertex <|
                 \_ msg finalGraph ->
                     Graph.hasVertex (vertexInMsg msg) finalGraph
                         |> Expect.true ""
-            , msgTest "makes the vertex visible in `vertices`" app addVertexFuzzer <|
+            , msgTest "makes the vertex visible in `vertices`" app msgFuzzers.addVertex <|
                 \_ msg finalGraph ->
                     Graph.vertices finalGraph
                         |> List.member (vertexInMsg msg)
                         |> Expect.true ""
-            , msgTest "does nothing if the vertex is already present" app addVertexFuzzer <|
+            , msgTest "does nothing if the vertex is already present" app msgFuzzers.addVertex <|
                 \initGraph msg finalGraph ->
                     let
                         addedVertex =
@@ -196,7 +180,7 @@ suite =
                         Expect.pass
             ]
         , describe "removeVertex"
-            [ msgTest "removes all edges containing this vertex" app removeVertexFuzzer <|
+            [ msgTest "removes all edges containing this vertex" app msgFuzzers.removeVertex <|
                 \_ msg finalGraph ->
                     let
                         removedVertex =
@@ -205,16 +189,16 @@ suite =
                     Graph.edges finalGraph
                         |> List.any (\{ from, to } -> from == removedVertex || to == removedVertex)
                         |> Expect.false ""
-            , msgTest "results in hasVertex v == False" app removeVertexFuzzer <|
+            , msgTest "results in hasVertex v == False" app msgFuzzers.removeVertex <|
                 \_ msg finalGraph ->
                     Graph.hasVertex (vertexInMsg msg) finalGraph
                         |> Expect.false ""
-            , msgTest "makes the vertex not visible in `vertices`" app removeVertexFuzzer <|
+            , msgTest "makes the vertex not visible in `vertices`" app msgFuzzers.removeVertex <|
                 \_ msg finalGraph ->
                     Graph.vertices finalGraph
                         |> List.member (vertexInMsg msg)
                         |> Expect.false ""
-            , msgTest "does nothing if the vertex is not present" app removeVertexFuzzer <|
+            , msgTest "does nothing if the vertex is not present" app msgFuzzers.removeVertex <|
                 \initGraph msg finalGraph ->
                     let
                         removedVertex =
@@ -228,7 +212,7 @@ suite =
                             |> Expect.equal initGraph
             ]
         , describe "updateVertex"
-            [ msgTest "results in hasVertex updated == True if initial vertex was present" app updateVertexFuzzer <|
+            [ msgTest "results in hasVertex updated == True if initial vertex was present" app msgFuzzers.updateVertex <|
                 \initGraph msg finalGraph ->
                     let
                         vertex =
@@ -246,7 +230,7 @@ suite =
                             |> Expect.equal initGraph
             ]
         , describe "addEdge"
-            [ msgTest "results in hasVertex from = True" app addEdgeFuzzer <|
+            [ msgTest "results in hasVertex from = True" app msgFuzzers.addEdge <|
                 \_ msg finalGraph ->
                     let
                         { from } =
@@ -254,7 +238,7 @@ suite =
                     in
                     Graph.hasVertex from finalGraph
                         |> Expect.true ""
-            , msgTest "results in hasVertex to = True" app addEdgeFuzzer <|
+            , msgTest "results in hasVertex to = True" app msgFuzzers.addEdge <|
                 \_ msg finalGraph ->
                     let
                         { to } =
@@ -262,7 +246,7 @@ suite =
                     in
                     Graph.hasVertex to finalGraph
                         |> Expect.true ""
-            , msgTest "results in hasEdge = True" app addEdgeFuzzer <|
+            , msgTest "results in hasEdge = True" app msgFuzzers.addEdge <|
                 \_ msg finalGraph ->
                     let
                         { from, to } =
@@ -270,7 +254,7 @@ suite =
                     in
                     Graph.hasEdge from to finalGraph
                         |> Expect.true ""
-            , msgTest "does nothing if the edge is already present" app addEdgeFuzzer <|
+            , msgTest "does nothing if the edge is already present" app msgFuzzers.addEdge <|
                 \initGraph msg finalGraph ->
                     let
                         { from, to } =
@@ -284,7 +268,7 @@ suite =
                         Expect.pass
             ]
         , describe "removeEdge"
-            [ msgTest "results in hasEdge == False" app removeEdgeFuzzer <|
+            [ msgTest "results in hasEdge == False" app msgFuzzers.removeEdge <|
                 \_ msg finalGraph ->
                     let
                         { from, to } =
@@ -292,12 +276,12 @@ suite =
                     in
                     Graph.hasEdge from to finalGraph
                         |> Expect.false ""
-            , msgTest "makes the edge not visible in `edges`" app removeEdgeFuzzer <|
+            , msgTest "makes the edge not visible in `edges`" app msgFuzzers.removeEdge <|
                 \_ msg finalGraph ->
                     Graph.edges finalGraph
                         |> List.member (edgeInMsg msg)
                         |> Expect.false ""
-            , msgTest "does nothing if the edge is not present" app removeEdgeFuzzer <|
+            , msgTest "does nothing if the edge is not present" app msgFuzzers.removeEdge <|
                 \initGraph msg finalGraph ->
                     let
                         { from, to } =
