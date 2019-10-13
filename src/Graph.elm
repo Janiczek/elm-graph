@@ -1,8 +1,8 @@
 module Graph exposing
     ( Graph, Edge, empty, fromVerticesAndEdges
-    , addVertex, removeVertex, updateVertex, addEdge, removeEdge, fold
+    , addVertex, removeVertex, updateVertex, addEdge, removeEdge, map
     , isEmpty, hasVertex, hasEdge, areAdjacent
-    , size, vertices, edges, outgoingEdges, edgeToComparable
+    , fold, size, vertices, edges, outgoingEdges, edgeToComparable
     )
 
 {-|
@@ -15,7 +15,7 @@ module Graph exposing
 
 # Modification
 
-@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge, fold
+@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge, map
 
 
 # Predicates
@@ -25,7 +25,7 @@ module Graph exposing
 
 # Querying
 
-@docs size, vertices, edges, outgoingEdges, edgeToComparable
+@docs fold, size, vertices, edges, outgoingEdges, edgeToComparable
 
   - TODO `{from:v,to:v}` vs `v v` in arguments... make consistent?
   - TODO maybe naming - member instead of hasVertex? what about hasEdge then?
@@ -47,6 +47,7 @@ module Graph exposing
 -}
 
 import AssocList as Dict exposing (Dict)
+import AssocList.Extra as DictExtra
 import Maybe.Extra
 import Set exposing (Set)
 
@@ -320,6 +321,18 @@ removeEdge { from, to } ((Graph g) as graph) =
         (Dict.get from g.vertices)
         (Dict.get to g.vertices)
         |> Maybe.withDefault graph
+
+
+map : (vertex -> vertex2) -> Graph vertex -> Graph vertex2
+map fn (Graph g) =
+    Graph
+        { edges = g.edges
+
+        -- TODO better transition from vertices to verticesById or vice versa? (via some "swap" function?)
+        , verticesById = Dict.map (always fn) g.verticesById
+        , vertices = DictExtra.mapKeys fn g.vertices
+        , unusedId = g.unusedId
+        }
 
 
 {-| Fold a function over all the vertices, starting with the "oldest" vertices.

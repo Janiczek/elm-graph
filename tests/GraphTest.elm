@@ -347,6 +347,14 @@ suite =
                         finalGraph
                             |> Expect.equal initGraph
             ]
+        , describe "map"
+            [ test "usecase" <|
+                \() ->
+                    graphWithFooBar
+                        |> Graph.map String.toUpper
+                        |> Graph.vertices
+                        |> Expect.equal [ "FOO", "BAR" ]
+            ]
         , describe "fold"
             [ test "starts with the oldest vertices" <|
                 \() ->
