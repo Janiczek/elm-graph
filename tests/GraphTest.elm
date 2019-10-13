@@ -407,6 +407,16 @@ suite =
                     Graph.areAdjacent "bar" "baz" graphWithFoo
                         |> Expect.false ""
             ]
+        , describe "size"
+            [ test "zero for empty graph" <|
+                \() ->
+                    Graph.size Graph.empty
+                        |> Expect.equal 0
+            , invariantTest "equals length of `vertices`" app <|
+                \_ _ finalGraph ->
+                    Graph.size finalGraph
+                        |> Expect.equal (List.length (Graph.vertices finalGraph))
+            ]
         , describe "vertices"
             [ test "returns empty list for empty graph" <|
                 \() ->

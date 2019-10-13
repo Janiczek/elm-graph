@@ -2,7 +2,7 @@ module Graph exposing
     ( Graph, empty
     , addVertex, removeVertex, updateVertex, addEdge, removeEdge
     , isEmpty, hasVertex, hasEdge, areAdjacent
-    , vertices, edges, outgoingEdges
+    , size, vertices, edges, outgoingEdges
     )
 
 {-|
@@ -25,7 +25,7 @@ module Graph exposing
 
 # Querying
 
-@docs vertices, edges, outgoingEdges
+@docs size, vertices, edges, outgoingEdges
 
   - TODO measure performance
   - TODO neighbours function (outgoing AND incoming edges)
@@ -302,6 +302,13 @@ removeEdge from to ((Graph g) as graph) =
         (Dict.get from g.vertices)
         (Dict.get to g.vertices)
         |> Maybe.withDefault graph
+
+
+{-| TODO
+-}
+size : Graph vertex -> Int
+size (Graph g) =
+    Dict.size g.vertices
 
 
 {-| TODO
