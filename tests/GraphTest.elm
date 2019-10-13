@@ -29,13 +29,13 @@ graphWithFooBar =
 graphWithFooBarWithEdge : Graph String
 graphWithFooBarWithEdge =
     Graph.empty
-        |> Graph.addEdge { from = "foo", to = "bar" }
+        |> Graph.addEdge "foo" "bar"
 
 
 graphWithFooBarWithReverseEdge : Graph String
 graphWithFooBarWithReverseEdge =
     Graph.empty
-        |> Graph.addEdge { from = "bar", to = "foo" }
+        |> Graph.addEdge "bar" "foo"
 
 
 
@@ -76,11 +76,11 @@ update msg graph =
         UpdateVertex before after ->
             Graph.updateVertex before (always after) graph
 
-        AddEdge edge ->
-            Graph.addEdge edge graph
+        AddEdge { from, to } ->
+            Graph.addEdge from to graph
 
-        RemoveEdge edge ->
-            Graph.removeEdge edge graph
+        RemoveEdge { from, to } ->
+            Graph.removeEdge from to graph
 
 
 modelToString : Model -> String
@@ -535,8 +535,8 @@ suite =
             , test "works for graph with two edges" <|
                 \() ->
                     Graph.empty
-                        |> Graph.addEdge { from = "foo", to = "bar" }
-                        |> Graph.addEdge { from = "bar", to = "baz" }
+                        |> Graph.addEdge "foo" "bar"
+                        |> Graph.addEdge "bar" "baz"
                         |> Graph.edges
                         |> List.map Graph.edgeToComparable
                         |> Set.fromList
@@ -546,6 +546,19 @@ suite =
                              ]
                                 |> List.map Graph.edgeToComparable
                                 |> Set.fromList
+                            )
+            ]
+        , describe "verticesAndEdges"
+            [ invariantTest "same as `vertices` and `edges` calls" app <|
+                \_ _ finalGraph ->
+                    let
+                        { vertices, edges } =
+                            Graph.verticesAndEdges finalGraph
+                    in
+                    ( vertices, edges )
+                        |> Expect.equal
+                            ( Graph.vertices finalGraph
+                            , Graph.edges finalGraph
                             )
             ]
         , describe "outgoingEdges"

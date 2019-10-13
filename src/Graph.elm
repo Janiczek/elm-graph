@@ -2,7 +2,7 @@ module Graph exposing
     ( Graph, Edge, empty, fromVerticesAndEdges
     , addVertex, removeVertex, updateVertex, addEdge, removeEdge, map, reverseEdges
     , isEmpty, hasVertex, hasEdge, areAdjacent
-    , fold, size, vertices, edges, outgoingEdges, edgeToComparable
+    , fold, size, vertices, edges, verticesAndEdges, outgoingEdges, edgeToComparable
     )
 
 {-|
@@ -25,24 +25,7 @@ module Graph exposing
 
 # Querying
 
-@docs fold, size, vertices, edges, outgoingEdges, edgeToComparable
-
-  - TODO `{from:v,to:v}` vs `v v` in arguments... make consistent?
-  - TODO maybe naming - member instead of hasVertex? what about hasEdge then?
-  - TODO measure performance
-  - TODO neighbours function (outgoing AND incoming edges)
-  - TODO union, intersect, difference? maybe?
-  - TODO some helper function for getting ID of vertex, and getting vertex of ID
-  - TODO undirected variant, simpler API
-  - TODO module documentation
-  - TODO think about metadata for vertices. Is the type parameter enough? Is it
-    OK that the user would have to add their own IDs or whatever?
-  - TODO for now we don't have any metadata for edges, but think about adding that!
-      - getEdgeValue : vertex -> vertex -> Graph vertex edge -> Maybe edge
-      - setEdgeValue : vertex -> vertex -> edge -> Graph vertex edge -> Maybe edge
-      - would it have to be mandatory? or optional and wrapped in Maybe?
-        -- TODO fromList? That's the kind of API I don't like much about the elm-community lib...
-  - TODO currently user can't have two vertices with same data... that's probably OK, right?
+@docs fold, size, vertices, edges, verticesAndEdges, outgoingEdges, edgeToComparable
 
 -}
 
@@ -52,11 +35,45 @@ import Maybe.Extra
 import Set exposing (Set)
 
 
-{-| TODO
+
+{-
+   - TODO symmetricClosure: Graph vertex -> UndirectedGraph vertex?
+   - TODO check acyclic
+   - TODO DFS, BFS
+   - TODO topological sort
+   - TODO strongly connected components
+   - TODO export to DOT
+   - TODO export to elm-community/graph?
+   - TODO `{from:v,to:v}` vs `v v` in arguments... make consistent?
+   - TODO maybe naming - member instead of hasVertex? what about hasEdge then?
+   - TODO measure performance
+   - TODO neighbours function (outgoing AND incoming edges)
+   - TODO union, intersect, difference? maybe?
+   - TODO some helper function for getting ID of vertex, and getting vertex of ID
+   - TODO undirected variant, simpler API
+   - TODO module documentation
+   - TODO think about metadata for vertices. Is the type parameter enough? Is it
+     OK that the user would have to add their own IDs or whatever?
+   - TODO for now we don't have any metadata for edges, but think about adding that!
+       - getEdgeValue : vertex -> vertex -> Graph vertex edge -> Maybe edge
+       - setEdgeValue : vertex -> vertex -> edge -> Graph vertex edge -> Maybe edge
+       - would it have to be mandatory? or optional and wrapped in Maybe?
+         -- TODO fromList? That's the kind of API I don't like much about the elm-community lib...
+   - TODO currently user can't have two vertices with same data... that's probably OK, right?
+-}
+
+
+{-| A directed graph data structure.
+
+**The vertices** can hold any data, but you can't have two vertices holding the same data. (Think of it as of `Set`.)
+
+**The edges** don't hold any data, they just connect two vertices. Again, they are **directed:** the order does matter.
+
 -}
 type Graph vertex
     = Graph
         { -- TODO maybe use elm-community/intdict too
+          -- TODO reverse - incoming edges?
           edges : Dict Int (Set Int)
         , -- TODO can we do without the reverse index here?
           vertices : Dict vertex Int
@@ -65,7 +82,7 @@ type Graph vertex
         }
 
 
-{-| TODO
+{-| A representation of an edge between two vertices.
 -}
 type alias Edge vertex =
     { from : vertex
@@ -73,7 +90,7 @@ type alias Edge vertex =
     }
 
 
-{-| An empty graph.
+{-| An empty graph. No vertices, no edges.
 -}
 empty : Graph vertex
 empty =
@@ -87,13 +104,23 @@ empty =
 
 {-| Construct a graph from a list of vertices and a list of edges.
 
-Adds any vertices if they are present in the edges list but not in the vertices list.
+Implicitly adds vertices that are present in the edges list, as if they were mentioned in the vertices list too.
+
+    Graph.fromVerticesAndEdges
+        [ "x", "y" ]
+        [ { from = "x", to = "y" }
+        , { from = "y", to = "z" }
+        , { from = "z", to = "x" }
+        ]
+        |> Graph.vertices
+        |> List.length
+    --> 3
 
 -}
 fromVerticesAndEdges : List vertex -> List (Edge vertex) -> Graph vertex
 fromVerticesAndEdges vertices_ edges_ =
     empty
-        |> (\graph -> List.foldl addEdge graph edges_)
+        |> (\graph -> List.foldl (\{ from, to } -> addEdge from to) graph edges_)
         |> (\graph -> List.foldl addVertex graph vertices_)
 
 
@@ -104,14 +131,39 @@ isEmpty (Graph g) =
     Dict.isEmpty g.vertices
 
 
-{-| TODO
+{-| Is this vertex present in the graph?
+
+    Graph.empty
+        |> Graph.hasVertex "x"
+    --> False
+
+    Graph.empty
+        |> Graph.addVertex "x"
+        |> Graph.hasVertex "x"
+    --> True
+
 -}
 hasVertex : vertex -> Graph vertex -> Bool
 hasVertex vertex (Graph g) =
     Dict.member vertex g.vertices
 
 
-{-| Directed variant of `areAdjacent`
+{-| Is this edge present in the graph?
+
+    Graph.empty
+        |> Graph.hasEdge {from = "x", to = "y"}
+    --> False
+
+    Graph.empty
+        |> Graph.addEdge "x" "y"
+        |> Graph.hasEdge {from = "x", to = "y"}
+    --> True
+
+    Graph.empty
+        |> Graph.addEdge "y" "x"
+        |> Graph.hasEdge {from = "x", to = "y"}
+    --> False
+
 -}
 hasEdge : Edge vertex -> Graph vertex -> Bool
 hasEdge { from, to } (Graph g) =
@@ -129,9 +181,21 @@ hasEdge { from, to } (Graph g) =
         |> Maybe.withDefault False
 
 
-{-| Does the graph contain an edge between these two vertices?
+{-| Does the graph contain an edge between these two vertices (in any direction)?
 
-Undirected - the order of the two vertices doesn't matter.
+    Graph.empty
+        |> Graph.areAdjacent "x" "y"
+    --> False
+
+    Graph.empty
+        |> Graph.addEdge "x" "y"
+        |> Graph.areAdjacent "x" "y"
+    --> True
+
+    Graph.empty
+        |> Graph.addEdge "y" "x"
+        |> Graph.areAdjacent "x" "y"
+    --> True
 
 -}
 areAdjacent : vertex -> vertex -> Graph vertex -> Bool
@@ -140,23 +204,20 @@ areAdjacent v1 v2 graph =
         || hasEdge { from = v2, to = v1 } graph
 
 
-{-| Lists all vertices which to which the given vertex "points".
+{-| Lists all vertices this vertex has edges to.
 
-Directed - the edge can only go _from_ the given vertex.
+Directed - only lists the edges that go _from_ the given vertex.
 
      Graph.empty
          |> Graph.outgoingEdges "foo"
-     -->
-     []
+     --> []
 
      Graph.empty
-         |> Graph.addEdge {from = "foo", to = "bar"}
+         |> Graph.addEdge "foo" "bar"
+         |> Graph.addEdge "foo" "baz"
+         |> Graph.addEdge "quux" "foo"
          |> Graph.outgoingEdges "foo"
-     -->
-     [ "bar" ]
-
-TODO rethink naming?
-TODO or return List (Edge vertex)?
+     --> [ "bar", "baz" ]
 
 -}
 outgoingEdges : vertex -> Graph vertex -> List vertex
@@ -175,6 +236,11 @@ outgoingEdges vertex (Graph g) =
 
 By default it's not connected to any other vertex.
 
+    Graph.empty
+        |> Graph.addVertex "foo"
+        |> Graph.vertices
+    --> [ "foo" ]
+
 -}
 addVertex : vertex -> Graph vertex -> Graph vertex
 addVertex vertex ((Graph g) as graph) =
@@ -191,6 +257,13 @@ addVertex vertex ((Graph g) as graph) =
 
 
 {-| Remove the vertex from the graph. (Nothing happens if it's not present.)
+
+    Graph.empty
+        |> Graph.addVertex "foo"
+        |> Graph.removeVertex "foo"
+        |> Graph.isEmpty
+    --> True
+
 -}
 removeVertex : vertex -> Graph vertex -> Graph vertex
 removeVertex vertex ((Graph g) as graph) =
@@ -202,13 +275,9 @@ removeVertex vertex ((Graph g) as graph) =
                         | edges =
                             g.edges
                                 -- outgoing
-                                |> Dict.filter (\k v -> k /= id)
+                                |> Dict.filter (\fromId _ -> fromId /= id)
                                 -- incoming
-                                |> Dict.map
-                                    (\k v ->
-                                        -- TODO maybe do member check first?
-                                        Set.remove id v
-                                    )
+                                |> Dict.map (\_ toIds -> Set.remove id toIds)
                         , vertices = Dict.remove vertex g.vertices
                         , verticesById = Dict.remove id g.verticesById
                     }
@@ -217,6 +286,13 @@ removeVertex vertex ((Graph g) as graph) =
 
 
 {-| Updates the vertex data. Does nothing if the vertex is not present.
+
+    Graph.empty
+        |> Graph.addVertex "foo"
+        |> Graph.updateVertex "foo" String.toUpper
+        |> Graph.vertices
+    --> [ "FOO" ]
+
 -}
 updateVertex : vertex -> (vertex -> vertex) -> Graph vertex -> Graph vertex
 updateVertex vertex fn ((Graph g) as graph) =
@@ -248,21 +324,31 @@ updateVertex vertex fn ((Graph g) as graph) =
 If any of the vertices aren't present yet, this function **will add them** before
 adding the edge.
 
-TODO example
+Directed: the order of the vertices does matter.
+
+    Graph.empty
+        |> Graph.addEdge "foo" "bar"
+        |> Graph.vertices
+    --> [ "foo", "bar" ]
+
+    Graph.empty
+        |> Graph.addEdge "foo" "bar"
+        |> Graph.edges
+    --> [ { from = "foo", to = "bar" } ]
 
 -}
-addEdge : Edge vertex -> Graph vertex -> Graph vertex
-addEdge ({ from, to } as edge) graph =
+addEdge : vertex -> vertex -> Graph vertex -> Graph vertex
+addEdge from to graph =
     graph
         |> addVertex from
         |> addVertex to
-        |> addEdge_ edge
+        |> addEdge_ from to
 
 
 {-| A helper for `addEdge` that doesn't check if the vertices are present.
 -}
-addEdge_ : Edge vertex -> Graph vertex -> Graph vertex
-addEdge_ { from, to } ((Graph g) as graph) =
+addEdge_ : vertex -> vertex -> Graph vertex -> Graph vertex
+addEdge_ from to ((Graph g) as graph) =
     let
         maybeFromId =
             Dict.get from g.vertices
@@ -292,15 +378,20 @@ addEdge_ { from, to } ((Graph g) as graph) =
         |> Maybe.withDefault graph
 
 
-{-| Remove an edge from the first vertex to the second one.
+{-| Remove an edge from the first vertex to the second one. Does nothing if the
+edge is not present.
 
-If the edge is not present, nothing happens.
+Directed: the order of the vertices does matter.
 
-TODO example
+    Graph.empty
+        |> Graph.addEdge "foo" "bar"
+        |> Graph.removeEdge "foo" "bar"
+        |> Graph.edges
+    --> []
 
 -}
-removeEdge : Edge vertex -> Graph vertex -> Graph vertex
-removeEdge { from, to } ((Graph g) as graph) =
+removeEdge : vertex -> vertex -> Graph vertex -> Graph vertex
+removeEdge from to ((Graph g) as graph) =
     Maybe.map2
         (\fromId toId ->
             Graph
@@ -323,7 +414,15 @@ removeEdge { from, to } ((Graph g) as graph) =
         |> Maybe.withDefault graph
 
 
-{-| TODO
+{-| Applies a function to all the vertices.
+
+    Graph.empty
+        |> Graph.addVertex "foo"
+        |> Graph.addVertex "bar"
+        |> Graph.map String.toUpper
+        |> Graph.vertices
+    --> [ "FOO", "BAR" ]
+
 -}
 map : (vertex -> vertex2) -> Graph vertex -> Graph vertex2
 map fn (Graph g) =
@@ -337,7 +436,14 @@ map fn (Graph g) =
         }
 
 
-{-| TODO
+{-| Reverse the direction of all the edges in the graph.
+
+    Graph.empty
+        |> Graph.addEdge "foo" "bar"
+        |> Graph.reverseEdges
+        |> Graph.edges
+    --> [ { from = "bar", to = "foo" } ]
+
 -}
 reverseEdges : Graph vertex -> Graph vertex
 reverseEdges (Graph g) =
@@ -370,29 +476,63 @@ reverseEdges (Graph g) =
 
 
 {-| Fold a function over all the vertices, starting with the "oldest" vertices.
+
+    Graph.empty
+        |> Graph.addVertex "foo"
+        |> Graph.addVertex "bar"
+        |> Graph.fold (\v acc -> acc ++ v) ""
+    --> "foobar"
+
 -}
 fold : (vertex -> acc -> acc) -> acc -> Graph vertex -> acc
 fold fn acc (Graph g) =
     Dict.foldr (always fn) acc g.verticesById
 
 
-{-| TODO
+{-| Determine the number of vertices in the graph.
+
+    Graph.size Graph.empty
+    --> 0
+
+    Graph.empty
+        |> Graph.addVertex "foo"
+        |> Graph.addVertex "bar"
+        |> Graph.size
+    --> 2
+
 -}
 size : Graph vertex -> Int
 size (Graph g) =
     Dict.size g.vertices
 
 
-{-| TODO
+{-| Return a list of the vertices, starting with the "oldest".
+
+    Graph.empty
+        |> Graph.addVertex "foo"
+        |> Graph.addVertex "bar"
+        |> Graph.vertices
+    --> [ "foo", "bar" ]
+
 -}
 vertices : Graph vertex -> List vertex
 vertices (Graph g) =
     Dict.keys g.vertices
 
 
-{-| TODO
+{-| Return a list of the edges. Don't expect any sensible order - it's
+implementation defined.
+
+    Graph.empty
+        |> Graph.addEdge "foo" "bar"
+        |> Graph.addEdge "bar" "quux"
+        |> Graph.edges
+    --> [ { from = "bar", to = "quux" }
+        , { from = "foo", to = "bar" }
+        ]
+
 -}
-edges : Graph vertex -> List { from : vertex, to : vertex }
+edges : Graph vertex -> List (Edge vertex)
 edges (Graph g) =
     g.edges
         |> Dict.toList
@@ -417,7 +557,29 @@ edges (Graph g) =
         |> Maybe.withDefault []
 
 
-{-| TODO
+{-| Return a record with a list of vertices and list of edges in the graph.
+
+    Graph.empty
+        |> Graph.addVertex "foo"
+        |> Graph.addEdge "foo" "bar"
+        |> Graph.verticesAndEdges
+    --> { vertices = [ "foo", "bar" ]
+        , edges = [ { from = "foo", to = "bar" } ]
+        }
+
+-}
+verticesAndEdges : Graph vertex -> { vertices : List vertex, edges : List (Edge vertex) }
+verticesAndEdges graph =
+    { vertices = vertices graph
+    , edges = edges graph
+    }
+
+
+{-| Transform the record into a `(from, to)` tuple.
+
+    Graph.edgeToComparable { from = "foo", to = "bar" }
+    --> ("foo", "bar")
+
 -}
 edgeToComparable : Edge comparable -> ( comparable, comparable )
 edgeToComparable { from, to } =
