@@ -355,14 +355,26 @@ suite =
                         |> Graph.vertices
                         |> Expect.equal [ "FOO", "BAR" ]
             ]
-        , describe "fold"
-            [ test "starts with the oldest vertices" <|
-                \() ->
-                    Graph.empty
-                        |> Graph.addVertex "foo"
-                        |> Graph.addVertex "bar"
-                        |> Graph.fold (\vertex acc -> acc ++ vertex) ""
-                        |> Expect.equal "foobar"
+        , describe "reverseEdges"
+            [ invariantTest "reverses all edges" app <|
+                \_ _ finalGraph ->
+                    let
+                        initialEdges =
+                            finalGraph
+                                |> Graph.edges
+                                |> List.map Graph.edgeToComparable
+                                |> Set.fromList
+
+                        edgesAfterReversing =
+                            finalGraph
+                                |> Graph.reverseEdges
+                                |> Graph.edges
+                                |> List.map Graph.edgeToComparable
+                                |> Set.fromList
+                    in
+                    edgesAfterReversing
+                        |> Expect.equalSets
+                            (initialEdges |> Set.map (\( from, to ) -> ( to, from )))
             ]
         , describe "isEmpty"
             [ invariantTest "only True if no vertices" app <|
@@ -476,6 +488,15 @@ suite =
                 \() ->
                     Graph.areAdjacent "bar" "baz" graphWithFoo
                         |> Expect.false ""
+            ]
+        , describe "fold"
+            [ test "starts with the oldest vertices" <|
+                \() ->
+                    Graph.empty
+                        |> Graph.addVertex "foo"
+                        |> Graph.addVertex "bar"
+                        |> Graph.fold (\vertex acc -> acc ++ vertex) ""
+                        |> Expect.equal "foobar"
             ]
         , describe "size"
             [ test "zero for empty graph" <|

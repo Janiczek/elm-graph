@@ -1,6 +1,6 @@
 module Graph exposing
     ( Graph, Edge, empty, fromVerticesAndEdges
-    , addVertex, removeVertex, updateVertex, addEdge, removeEdge, map
+    , addVertex, removeVertex, updateVertex, addEdge, removeEdge, map, reverseEdges
     , isEmpty, hasVertex, hasEdge, areAdjacent
     , fold, size, vertices, edges, outgoingEdges, edgeToComparable
     )
@@ -15,7 +15,7 @@ module Graph exposing
 
 # Modification
 
-@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge, map
+@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge, map, reverseEdges
 
 
 # Predicates
@@ -323,6 +323,8 @@ removeEdge { from, to } ((Graph g) as graph) =
         |> Maybe.withDefault graph
 
 
+{-| TODO
+-}
 map : (vertex -> vertex2) -> Graph vertex -> Graph vertex2
 map fn (Graph g) =
     Graph
@@ -332,6 +334,38 @@ map fn (Graph g) =
         , verticesById = Dict.map (always fn) g.verticesById
         , vertices = DictExtra.mapKeys fn g.vertices
         , unusedId = g.unusedId
+        }
+
+
+{-| TODO
+-}
+reverseEdges : Graph vertex -> Graph vertex
+reverseEdges (Graph g) =
+    Graph
+        { g
+            | edges =
+                g.edges
+                    |> Dict.toList
+                    |> List.concatMap
+                        (\( from, tos ) ->
+                            tos
+                                |> Set.toList
+                                |> List.map (\to -> ( to, from ))
+                        )
+                    |> List.foldl
+                        (\( from, to ) edges_ ->
+                            Dict.update from
+                                (\maybeEdgesFrom ->
+                                    case maybeEdgesFrom of
+                                        Nothing ->
+                                            Just (Set.singleton to)
+
+                                        Just edgesFrom ->
+                                            Just (Set.insert to edgesFrom)
+                                )
+                                edges_
+                        )
+                        Dict.empty
         }
 
 
