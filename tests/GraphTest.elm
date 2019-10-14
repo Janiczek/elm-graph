@@ -405,7 +405,7 @@ suite =
                             |> Expect.equal initGraph
             ]
         , describe "updateEdge"
-            [ msgTest "the new edge has the new data if initial edge was present" app msgFuzzers.updateEdge <|
+            [ msgTest "[TODO: THIS ERRORS IN THE WEIRDEST WAYS] the new edge has the new data if initial edge was present" app msgFuzzers.updateEdge <|
                 \initGraph msg finalGraph ->
                     let
                         { from, to, data } =
