@@ -9,7 +9,7 @@ If you'd have liked to use this package but some crucial functionality is missin
 ```elm
 import Graph exposing (Graph)
 
-myGraph : Graph
+myGraph : Graph String Int
 myGraph =
     Graph.empty
         |> Graph.addVertex "foo"
