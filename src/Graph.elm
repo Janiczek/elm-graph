@@ -528,8 +528,8 @@ implementation defined.
         |> Graph.addEdge "bar" "quux"
         |> Graph.edges
     --> [ { from = "bar", to = "quux" }
-        , { from = "foo", to = "bar" }
-        ]
+    --  , { from = "foo", to = "bar" }
+    --  ]
 
 -}
 edges : Graph vertex -> List (Edge vertex)
@@ -564,8 +564,8 @@ edges (Graph g) =
         |> Graph.addEdge "foo" "bar"
         |> Graph.verticesAndEdges
     --> { vertices = [ "foo", "bar" ]
-        , edges = [ { from = "foo", to = "bar" } ]
-        }
+    --  , edges = [ { from = "foo", to = "bar" } ]
+    --  }
 
 -}
 verticesAndEdges : Graph vertex -> { vertices : List vertex, edges : List (Edge vertex) }
