@@ -1,8 +1,8 @@
 module Graph exposing
     ( Graph, Edge, empty, fromVerticesAndEdges
-    , addVertex, removeVertex, updateVertex, addEdge, removeEdge, map, reverseEdges
+    , addVertex, removeVertex, updateVertex, addEdge, removeEdge, updateEdge, mapVertices, mapEdges, reverseEdges
     , isEmpty, hasVertex, hasEdge, areAdjacent
-    , fold, size, vertices, edges, verticesAndEdges, outgoingEdges, edgeToComparable
+    , fold, size, vertices, edges, verticesAndEdges, outgoingEdges, outgoingEdgesWithData, getEdge, edgeToComparable
     )
 
 {-|
@@ -15,7 +15,7 @@ module Graph exposing
 
 # Modification
 
-@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge, map, reverseEdges
+@docs addVertex, removeVertex, updateVertex, addEdge, removeEdge, updateEdge, mapVertices, mapEdges, reverseEdges
 
 
 # Predicates
@@ -25,7 +25,7 @@ module Graph exposing
 
 # Querying
 
-@docs fold, size, vertices, edges, verticesAndEdges, outgoingEdges, edgeToComparable
+@docs fold, size, vertices, edges, verticesAndEdges, outgoingEdges, outgoingEdgesWithData, getEdge, edgeToComparable
 
 -}
 
@@ -37,29 +37,20 @@ import Set exposing (Set)
 
 
 {-
-   - TODO symmetricClosure: Graph vertex -> UndirectedGraph vertex?
+   - TODO symmetricClosure: Graph vertex edge -> UndirectedGraph vertex edge?
    - TODO check acyclic
    - TODO DFS, BFS
    - TODO topological sort
    - TODO strongly connected components
    - TODO export to DOT
    - TODO export to elm-community/graph?
-   - TODO `{from:v,to:v}` vs `v v` in arguments... make consistent?
-   - TODO maybe naming - member instead of hasVertex? what about hasEdge then?
    - TODO measure performance
    - TODO neighbours function (outgoing AND incoming edges)
    - TODO union, intersect, difference? maybe?
    - TODO some helper function for getting ID of vertex, and getting vertex of ID
    - TODO undirected variant, simpler API
-   - TODO module documentation
-   - TODO think about metadata for vertices. Is the type parameter enough? Is it
-     OK that the user would have to add their own IDs or whatever?
-   - TODO for now we don't have any metadata for edges, but think about adding that!
-       - getEdgeValue : vertex -> vertex -> Graph vertex edge -> Maybe edge
-       - setEdgeValue : vertex -> vertex -> edge -> Graph vertex edge -> Maybe edge
-       - would it have to be mandatory? or optional and wrapped in Maybe?
-         -- TODO fromList? That's the kind of API I don't like much about the elm-community lib...
    - TODO currently user can't have two vertices with same data... that's probably OK, right?
+   - TODO currently user can't have two same edges with different data... probably *not* OK?
 -}
 
 
@@ -67,14 +58,14 @@ import Set exposing (Set)
 
 **The vertices** can hold any data, but you can't have two vertices holding the same data. (Think of it as of `Set`.)
 
-**The edges** don't hold any data, they just connect two vertices. Again, they are **directed:** the order does matter.
+**The edges** can also hold any data, but you can't have two edges going from/to the same place.
 
 -}
-type Graph vertex
+type Graph vertex edge
     = Graph
         { -- TODO maybe use elm-community/intdict too
           -- TODO reverse - incoming edges?
-          edges : Dict Int (Set Int)
+          edges : Dict Int (Dict Int edge)
         , -- TODO can we do without the reverse index here?
           vertices : Dict vertex Int
         , verticesById : Dict Int vertex
@@ -84,15 +75,16 @@ type Graph vertex
 
 {-| A representation of an edge between two vertices.
 -}
-type alias Edge vertex =
+type alias Edge vertex edge =
     { from : vertex
     , to : vertex
+    , data : edge
     }
 
 
 {-| An empty graph. No vertices, no edges.
 -}
-empty : Graph vertex
+empty : Graph vertex edge
 empty =
     Graph
         { edges = Dict.empty
@@ -108,25 +100,25 @@ Implicitly adds vertices that are present in the edges list, as if they were men
 
     Graph.fromVerticesAndEdges
         [ "x", "y" ]
-        [ { from = "x", to = "y" }
-        , { from = "y", to = "z" }
-        , { from = "z", to = "x" }
+        [ { from = "x", to = "y", data = 100 }
+        , { from = "y", to = "z", data = 200 }
+        , { from = "z", to = "x", data = 300 }
         ]
         |> Graph.vertices
         |> List.length
     --> 3
 
 -}
-fromVerticesAndEdges : List vertex -> List (Edge vertex) -> Graph vertex
+fromVerticesAndEdges : List vertex -> List (Edge vertex edge) -> Graph vertex edge
 fromVerticesAndEdges vertices_ edges_ =
     empty
-        |> (\graph -> List.foldl (\{ from, to } -> addEdge from to) graph edges_)
+        |> (\graph -> List.foldl (\{ from, to, data } -> addEdge from to data) graph edges_)
         |> (\graph -> List.foldl addVertex graph vertices_)
 
 
 {-| Is the graph empty?
 -}
-isEmpty : Graph vertex -> Bool
+isEmpty : Graph vertex edge -> Bool
 isEmpty (Graph g) =
     Dict.isEmpty g.vertices
 
@@ -143,7 +135,7 @@ isEmpty (Graph g) =
     --> True
 
 -}
-hasVertex : vertex -> Graph vertex -> Bool
+hasVertex : vertex -> Graph vertex edge -> Bool
 hasVertex vertex (Graph g) =
     Dict.member vertex g.vertices
 
@@ -151,22 +143,22 @@ hasVertex vertex (Graph g) =
 {-| Is this edge present in the graph?
 
     Graph.empty
-        |> Graph.hasEdge {from = "x", to = "y"}
+        |> Graph.hasEdge "x" "y"
     --> False
 
     Graph.empty
-        |> Graph.addEdge "x" "y"
-        |> Graph.hasEdge {from = "x", to = "y"}
+        |> Graph.addEdge "x" "y" ()
+        |> Graph.hasEdge "x" "y"
     --> True
 
     Graph.empty
-        |> Graph.addEdge "y" "x"
-        |> Graph.hasEdge {from = "x", to = "y"}
+        |> Graph.addEdge "y" "x" ()
+        |> Graph.hasEdge "x" "y"
     --> False
 
 -}
-hasEdge : Edge vertex -> Graph vertex -> Bool
-hasEdge { from, to } (Graph g) =
+hasEdge : vertex -> vertex -> Graph vertex edge -> Bool
+hasEdge from to (Graph g) =
     let
         maybeEdgesFrom =
             Dict.get from g.vertices
@@ -175,7 +167,7 @@ hasEdge { from, to } (Graph g) =
         maybeToId =
             Dict.get to g.vertices
     in
-    Maybe.map2 Set.member
+    Maybe.map2 Dict.member
         maybeToId
         maybeEdgesFrom
         |> Maybe.withDefault False
@@ -188,20 +180,20 @@ hasEdge { from, to } (Graph g) =
     --> False
 
     Graph.empty
-        |> Graph.addEdge "x" "y"
+        |> Graph.addEdge "x" "y" ()
         |> Graph.areAdjacent "x" "y"
     --> True
 
     Graph.empty
-        |> Graph.addEdge "y" "x"
+        |> Graph.addEdge "y" "x" ()
         |> Graph.areAdjacent "x" "y"
     --> True
 
 -}
-areAdjacent : vertex -> vertex -> Graph vertex -> Bool
+areAdjacent : vertex -> vertex -> Graph vertex edge -> Bool
 areAdjacent v1 v2 graph =
-    hasEdge { from = v1, to = v2 } graph
-        || hasEdge { from = v2, to = v1 } graph
+    hasEdge v1 v2 graph
+        || hasEdge v2 v1 graph
 
 
 {-| Lists all vertices this vertex has edges to.
@@ -213,20 +205,80 @@ Directed - only lists the edges that go _from_ the given vertex.
      --> []
 
      Graph.empty
-         |> Graph.addEdge "foo" "bar"
-         |> Graph.addEdge "foo" "baz"
-         |> Graph.addEdge "quux" "foo"
+         |> Graph.addEdge "foo" "bar" ()
+         |> Graph.addEdge "foo" "baz" ()
+         |> Graph.addEdge "quux" "foo" ()
          |> Graph.outgoingEdges "foo"
      --> [ "bar", "baz" ]
 
 -}
-outgoingEdges : vertex -> Graph vertex -> List vertex
+outgoingEdges : vertex -> Graph vertex edge -> List vertex
 outgoingEdges vertex (Graph g) =
     Dict.get vertex g.vertices
         |> Maybe.andThen (\vertexId -> Dict.get vertexId g.edges)
-        |> Maybe.map Set.toList
+        |> Maybe.map Dict.keys
         |> Maybe.andThen
             (List.map (\toId -> Dict.get toId g.verticesById)
+                >> Maybe.Extra.combine
+            )
+        |> Maybe.withDefault []
+
+
+{-| Get the value associated with the edge.
+
+    Graph.empty
+        |> Graph.addEdge "foo" "bar" 100
+        |> Graph.getEdge "foo" "bar"
+    --> Just 100
+
+    Graph.empty
+        |> Graph.addEdge "foo" "bar" 100
+        |> Graph.getEdge "bar" "quux"
+    --> Nothing
+
+-}
+getEdge : vertex -> vertex -> Graph vertex edge -> Maybe edge
+getEdge from to (Graph g) =
+    Maybe.map2 Tuple.pair
+        (Dict.get from g.vertices)
+        (Dict.get to g.vertices)
+        |> Maybe.andThen
+            (\( fromId, toId ) ->
+                g.edges
+                    |> Dict.get fromId
+                    |> Maybe.andThen (Dict.get toId)
+            )
+
+
+{-| Lists all vertices this vertex has edges to, along with the edge data.
+
+Directed - only lists the edges that go _from_ the given vertex.
+
+     Graph.empty
+         |> Graph.outgoingEdgesWithData "foo"
+     --> []
+
+     Graph.empty
+         |> Graph.addEdge "foo" "bar" 100
+         |> Graph.addEdge "foo" "baz" 200
+         |> Graph.addEdge "quux" "foo" 300
+         |> Graph.outgoingEdgesWithData "foo"
+     --> [ ("bar", 100)
+     --  , ("baz", 200)
+     --  ]
+
+-}
+outgoingEdgesWithData : vertex -> Graph vertex edge -> List ( vertex, edge )
+outgoingEdgesWithData vertex (Graph g) =
+    Dict.get vertex g.vertices
+        |> Maybe.andThen (\vertexId -> Dict.get vertexId g.edges)
+        |> Maybe.map Dict.toList
+        |> Maybe.andThen
+            (List.map
+                (\( toId, data ) ->
+                    Dict.get toId g.verticesById
+                        |> Maybe.map (\to -> ( to, data ))
+                )
                 >> Maybe.Extra.combine
             )
         |> Maybe.withDefault []
@@ -242,7 +294,7 @@ By default it's not connected to any other vertex.
     --> [ "foo" ]
 
 -}
-addVertex : vertex -> Graph vertex -> Graph vertex
+addVertex : vertex -> Graph vertex edge -> Graph vertex edge
 addVertex vertex ((Graph g) as graph) =
     if hasVertex vertex graph then
         graph
@@ -265,7 +317,7 @@ addVertex vertex ((Graph g) as graph) =
     --> True
 
 -}
-removeVertex : vertex -> Graph vertex -> Graph vertex
+removeVertex : vertex -> Graph vertex edge -> Graph vertex edge
 removeVertex vertex ((Graph g) as graph) =
     Dict.get vertex g.vertices
         |> Maybe.map
@@ -277,7 +329,7 @@ removeVertex vertex ((Graph g) as graph) =
                                 -- outgoing
                                 |> Dict.filter (\fromId _ -> fromId /= id)
                                 -- incoming
-                                |> Dict.map (\_ toIds -> Set.remove id toIds)
+                                |> Dict.map (\_ toIds -> Dict.remove id toIds)
                         , vertices = Dict.remove vertex g.vertices
                         , verticesById = Dict.remove id g.verticesById
                     }
@@ -294,7 +346,7 @@ removeVertex vertex ((Graph g) as graph) =
     --> [ "FOO" ]
 
 -}
-updateVertex : vertex -> (vertex -> vertex) -> Graph vertex -> Graph vertex
+updateVertex : vertex -> (vertex -> vertex) -> Graph vertex edge -> Graph vertex edge
 updateVertex vertex fn ((Graph g) as graph) =
     Dict.get vertex g.vertices
         |> Maybe.map
@@ -319,7 +371,7 @@ updateVertex vertex fn ((Graph g) as graph) =
         |> Maybe.withDefault graph
 
 
-{-| Add an edge to the graph.
+{-| Add an edge to the graph, along with the associated data
 
 If any of the vertices aren't present yet, this function **will add them** before
 adding the edge.
@@ -327,28 +379,28 @@ adding the edge.
 Directed: the order of the vertices does matter.
 
     Graph.empty
-        |> Graph.addEdge "foo" "bar"
+        |> Graph.addEdge "foo" "bar" ()
         |> Graph.vertices
     --> [ "foo", "bar" ]
 
     Graph.empty
-        |> Graph.addEdge "foo" "bar"
+        |> Graph.addEdge "foo" "bar" 100
         |> Graph.edges
-    --> [ { from = "foo", to = "bar" } ]
+    --> [ { from = "foo", to = "bar", data = 100 } ]
 
 -}
-addEdge : vertex -> vertex -> Graph vertex -> Graph vertex
-addEdge from to graph =
+addEdge : vertex -> vertex -> edge -> Graph vertex edge -> Graph vertex edge
+addEdge from to data graph =
     graph
         |> addVertex from
         |> addVertex to
-        |> addEdge_ from to
+        |> addEdge_ from to data
 
 
 {-| A helper for `addEdge` that doesn't check if the vertices are present.
 -}
-addEdge_ : vertex -> vertex -> Graph vertex -> Graph vertex
-addEdge_ from to ((Graph g) as graph) =
+addEdge_ : vertex -> vertex -> edge -> Graph vertex edge -> Graph vertex edge
+addEdge_ from to data ((Graph g) as graph) =
     let
         maybeFromId =
             Dict.get from g.vertices
@@ -365,10 +417,21 @@ addEdge_ from to ((Graph g) as graph) =
                             (\maybeEdgesFrom ->
                                 case maybeEdgesFrom of
                                     Nothing ->
-                                        Just (Set.singleton toId)
+                                        Just (Dict.singleton toId data)
 
                                     Just edgesFrom ->
-                                        Just (Set.insert toId edgesFrom)
+                                        Just
+                                            (Dict.update toId
+                                                (\maybeData ->
+                                                    case maybeData of
+                                                        Nothing ->
+                                                            Just data
+
+                                                        Just oldData ->
+                                                            Just oldData
+                                                )
+                                                edgesFrom
+                                            )
                             )
                             g.edges
                 }
@@ -384,13 +447,13 @@ edge is not present.
 Directed: the order of the vertices does matter.
 
     Graph.empty
-        |> Graph.addEdge "foo" "bar"
+        |> Graph.addEdge "foo" "bar" 100
         |> Graph.removeEdge "foo" "bar"
         |> Graph.edges
     --> []
 
 -}
-removeEdge : vertex -> vertex -> Graph vertex -> Graph vertex
+removeEdge : vertex -> vertex -> Graph vertex edge -> Graph vertex edge
 removeEdge from to ((Graph g) as graph) =
     Maybe.map2
         (\fromId toId ->
@@ -404,10 +467,31 @@ removeEdge from to ((Graph g) as graph) =
                                         Nothing
 
                                     Just tos ->
-                                        Just (Set.remove toId tos)
+                                        Just (Dict.remove toId tos)
                             )
                             g.edges
                 }
+        )
+        (Dict.get from g.vertices)
+        (Dict.get to g.vertices)
+        |> Maybe.withDefault graph
+
+
+{-| Updates the edge data. Does nothing if the edge is not present.
+
+    Graph.empty
+        |> Graph.addEdge "foo" "bar" 100
+        |> Graph.updateEdge "foo" "bar" (\v -> v + 1000)
+        |> Graph.edges
+    --> [ { from = "foo", bar = "bar", data = 1100 } ]
+
+-}
+updateEdge : vertex -> vertex -> (edge -> edge) -> Graph vertex edge -> Graph vertex edge
+updateEdge from to fn ((Graph g) as graph) =
+    Maybe.map2
+        (\fromId toId ->
+            Graph
+                { g | edges = Dict.update fromId (Maybe.map (Dict.update toId (Maybe.map fn))) g.edges }
         )
         (Dict.get from g.vertices)
         (Dict.get to g.vertices)
@@ -419,13 +503,13 @@ removeEdge from to ((Graph g) as graph) =
     Graph.empty
         |> Graph.addVertex "foo"
         |> Graph.addVertex "bar"
-        |> Graph.map String.toUpper
+        |> Graph.mapVertices String.toUpper
         |> Graph.vertices
     --> [ "FOO", "BAR" ]
 
 -}
-map : (vertex -> vertex2) -> Graph vertex -> Graph vertex2
-map fn (Graph g) =
+mapVertices : (vertex1 -> vertex2) -> Graph vertex1 edge -> Graph vertex2 edge
+mapVertices fn (Graph g) =
     Graph
         { edges = g.edges
 
@@ -436,16 +520,40 @@ map fn (Graph g) =
         }
 
 
+{-| Applies a function to all the edges.
+
+    Graph.empty
+        |> Graph.addEdge "foo" "bar" 100
+        |> Graph.addEdge "bar" "baz" 200
+        |> Graph.mapEdges (\x -> x + 1000)
+        |> Graph.edges
+    --> [ { from = "foo", to = "bar", data = 1100 }
+    --  , { from = "bar", to = "baz", data = 1200 }
+    --  ]
+    --
+    --  (sans the ordering on the edges list, see the note in `edges`)
+
+-}
+mapEdges : (edge1 -> edge2) -> Graph vertex edge1 -> Graph vertex edge2
+mapEdges fn (Graph g) =
+    Graph
+        { edges = Dict.map (always (Dict.map (always fn))) g.edges
+        , verticesById = g.verticesById
+        , vertices = g.vertices
+        , unusedId = g.unusedId
+        }
+
+
 {-| Reverse the direction of all the edges in the graph.
 
     Graph.empty
-        |> Graph.addEdge "foo" "bar"
+        |> Graph.addEdge "foo" "bar" 100
         |> Graph.reverseEdges
         |> Graph.edges
-    --> [ { from = "bar", to = "foo" } ]
+    --> [ { from = "bar", to = "foo", data = 100 } ]
 
 -}
-reverseEdges : Graph vertex -> Graph vertex
+reverseEdges : Graph vertex edge -> Graph vertex edge
 reverseEdges (Graph g) =
     Graph
         { g
@@ -455,19 +563,19 @@ reverseEdges (Graph g) =
                     |> List.concatMap
                         (\( from, tos ) ->
                             tos
-                                |> Set.toList
-                                |> List.map (\to -> ( to, from ))
+                                |> Dict.toList
+                                |> List.map (\( to, data ) -> ( to, from, data ))
                         )
                     |> List.foldl
-                        (\( from, to ) edges_ ->
+                        (\( from, to, data ) edges_ ->
                             Dict.update from
                                 (\maybeEdgesFrom ->
                                     case maybeEdgesFrom of
                                         Nothing ->
-                                            Just (Set.singleton to)
+                                            Just (Dict.singleton to data)
 
                                         Just edgesFrom ->
-                                            Just (Set.insert to edgesFrom)
+                                            Just (Dict.insert to data edgesFrom)
                                 )
                                 edges_
                         )
@@ -484,7 +592,7 @@ reverseEdges (Graph g) =
     --> "foobar"
 
 -}
-fold : (vertex -> acc -> acc) -> acc -> Graph vertex -> acc
+fold : (vertex -> acc -> acc) -> acc -> Graph vertex edge -> acc
 fold fn acc (Graph g) =
     Dict.foldr (always fn) acc g.verticesById
 
@@ -501,7 +609,7 @@ fold fn acc (Graph g) =
     --> 2
 
 -}
-size : Graph vertex -> Int
+size : Graph vertex edge -> Int
 size (Graph g) =
     Dict.size g.vertices
 
@@ -515,39 +623,41 @@ size (Graph g) =
     --> [ "foo", "bar" ]
 
 -}
-vertices : Graph vertex -> List vertex
+vertices : Graph vertex edge -> List vertex
 vertices (Graph g) =
     Dict.keys g.vertices
 
 
-{-| Return a list of the edges. Don't expect any sensible order - it's
-implementation defined.
+{-| Return a list of the edges.
+
+_Don't expect any sensible order - it's implementation defined._
 
     Graph.empty
-        |> Graph.addEdge "foo" "bar"
-        |> Graph.addEdge "bar" "quux"
+        |> Graph.addEdge "foo" "bar" 100
+        |> Graph.addEdge "bar" "quux" 200
         |> Graph.edges
-    --> [ { from = "bar", to = "quux" }
-    --  , { from = "foo", to = "bar" }
+    --> [ { from = "bar", to = "quux", data = 200 }
+    --  , { from = "foo", to = "bar", data = 100 }
     --  ]
 
 -}
-edges : Graph vertex -> List (Edge vertex)
+edges : Graph vertex edge -> List (Edge vertex edge)
 edges (Graph g) =
     g.edges
         |> Dict.toList
         |> List.concatMap
             (\( from, tos ) ->
                 tos
-                    |> Set.toList
-                    |> List.map (\to -> ( from, to ))
+                    |> Dict.toList
+                    |> List.map (\( to, data ) -> ( from, to, data ))
             )
         |> List.map
-            (\( fromId, toId ) ->
+            (\( fromId, toId, data ) ->
                 Maybe.map2
                     (\from to ->
                         { from = from
                         , to = to
+                        , data = data
                         }
                     )
                     (Dict.get fromId g.verticesById)
@@ -561,26 +671,26 @@ edges (Graph g) =
 
     Graph.empty
         |> Graph.addVertex "foo"
-        |> Graph.addEdge "foo" "bar"
+        |> Graph.addEdge "foo" "bar" 100
         |> Graph.verticesAndEdges
     --> { vertices = [ "foo", "bar" ]
-    --  , edges = [ { from = "foo", to = "bar" } ]
+    --  , edges = [ { from = "foo", to = "bar", data = 100 } ]
     --  }
 
 -}
-verticesAndEdges : Graph vertex -> { vertices : List vertex, edges : List (Edge vertex) }
+verticesAndEdges : Graph vertex edge -> { vertices : List vertex, edges : List (Edge vertex edge) }
 verticesAndEdges graph =
     { vertices = vertices graph
     , edges = edges graph
     }
 
 
-{-| Transform the record into a `(from, to)` tuple.
+{-| Transform the record into a `(from, to, data)` tuple.
 
-    Graph.edgeToComparable { from = "foo", to = "bar" }
-    --> ("foo", "bar")
+    Graph.edgeToComparable { from = "foo", to = "bar", data = 123 }
+    --> ("foo", "bar", 123)
 
 -}
-edgeToComparable : Edge comparable -> ( comparable, comparable )
-edgeToComparable { from, to } =
-    ( from, to )
+edgeToComparable : Edge comparableVertex comparableEdge -> ( comparableVertex, comparableVertex, comparableEdge )
+edgeToComparable { from, to, data } =
+    ( from, to, data )

@@ -13,5 +13,7 @@ myGraph : Graph
 myGraph =
     Graph.empty
         |> Graph.addVertex "foo"
-        |> Graph.addEdge "foo" "bar"
+        |> Graph.addEdge "foo" "bar" 100
+        |> Graph.addEdge "foo" "baz" 200
+        |> Graph.addEdge "bar" "baz" 300
 ```

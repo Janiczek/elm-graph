@@ -13,29 +13,29 @@ import Test exposing (Test, describe, fuzz, fuzz2, test, todo)
 -- EXAMPLES
 
 
-graphWithFoo : Graph String
+graphWithFoo : Graph String Int
 graphWithFoo =
     Graph.empty
         |> Graph.addVertex "foo"
 
 
-graphWithFooBar : Graph String
+graphWithFooBar : Graph String Int
 graphWithFooBar =
     Graph.empty
         |> Graph.addVertex "foo"
         |> Graph.addVertex "bar"
 
 
-graphWithFooBarWithEdge : Graph String
+graphWithFooBarWithEdge : Graph String Int
 graphWithFooBarWithEdge =
     Graph.empty
-        |> Graph.addEdge "foo" "bar"
+        |> Graph.addEdge "foo" "bar" 100
 
 
-graphWithFooBarWithReverseEdge : Graph String
+graphWithFooBarWithReverseEdge : Graph String Int
 graphWithFooBarWithReverseEdge =
     Graph.empty
-        |> Graph.addEdge "bar" "foo"
+        |> Graph.addEdge "bar" "foo" 200
 
 
 
@@ -43,15 +43,16 @@ graphWithFooBarWithReverseEdge =
 
 
 type alias Model =
-    Graph String
+    Graph String Int
 
 
 type Msg
     = AddVertex String
     | RemoveVertex String
     | UpdateVertex String String
-    | AddEdge (Edge String)
-    | RemoveEdge (Edge String)
+    | AddEdge (Edge String Int)
+    | RemoveEdge (Edge String Int)
+    | UpdateEdge (Edge String Int)
 
 
 app : ArchitectureTest.TestedApp Model Msg
@@ -74,13 +75,18 @@ update msg graph =
             Graph.removeVertex vertex graph
 
         UpdateVertex before after ->
+            -- in this case more like `setVertex` but it shouldn't matter to the tests...
             Graph.updateVertex before (always after) graph
 
-        AddEdge { from, to } ->
-            Graph.addEdge from to graph
+        AddEdge { from, to, data } ->
+            Graph.addEdge from to data graph
 
         RemoveEdge { from, to } ->
             Graph.removeEdge from to graph
+
+        UpdateEdge { from, to, data } ->
+            -- in this case more like `setEdge` but it shouldn't matter to the tests...
+            Graph.updateEdge from to (always data) graph
 
 
 modelToString : Model -> String
@@ -95,11 +101,20 @@ modelToString graph =
     "<GRAPH vertices="
         ++ Debug.toString vertices
         ++ " edges="
-        ++ Debug.toString edges
+        ++ ("[" ++ (edges |> List.map edgeToString |> String.join ", ") ++ "]")
         ++ ">"
 
 
-modelFuzzer : Fuzzer (Graph String)
+edgeToString : Edge vertex edge -> String
+edgeToString { from, to, data } =
+    Debug.toString from
+        ++ "->"
+        ++ Debug.toString to
+        ++ ": "
+        ++ Debug.toString data
+
+
+modelFuzzer : Fuzzer (Graph String Int)
 modelFuzzer =
     Fuzz.oneOf
         [ Fuzz.constant Graph.empty
@@ -122,11 +137,35 @@ vertexFuzzer =
         ]
 
 
-edgeFuzzer : Fuzzer (Edge String)
+edgeFuzzer : Fuzzer (Edge String Int)
 edgeFuzzer =
-    Fuzz.map2 Edge
+    Fuzz.map3 Edge
         vertexFuzzer
         vertexFuzzer
+        Fuzz.int
+
+
+edgeListFuzzer : Fuzzer (List (Edge String Int))
+edgeListFuzzer =
+    {- We don't use the simple `Fuzz.list edgeFuzzer` because
+       it would create [Edge "a" "b" 100, Edge "a" "b" 200]
+       and wreak havoc on our test suite.
+
+       So we make sure the (from,to) part doesn't have duplicates.
+    -}
+    Fuzz.list edgeFuzzer
+        |> Fuzz.map
+            (\list ->
+                let
+                    uniqueWithoutData =
+                        List.map (\{ from, to } -> ( from, to )) list
+                            |> Set.fromList
+                            |> Set.toList
+                in
+                List.map2 (\( from, to ) { data } -> { from = from, to = to, data = data })
+                    uniqueWithoutData
+                    list
+            )
 
 
 msgFuzzers =
@@ -135,6 +174,7 @@ msgFuzzers =
     , updateVertex = Fuzz.map2 UpdateVertex vertexFuzzer vertexFuzzer
     , addEdge = Fuzz.map AddEdge edgeFuzzer
     , removeEdge = Fuzz.map RemoveEdge edgeFuzzer
+    , updateEdge = Fuzz.map UpdateEdge edgeFuzzer
     }
 
 
@@ -146,6 +186,7 @@ msgFuzzer =
         , msgFuzzers.updateVertex
         , msgFuzzers.addEdge
         , msgFuzzers.removeEdge
+        , msgFuzzers.updateEdge
         ]
 
 
@@ -189,17 +230,17 @@ suite =
                     in
                     Set.diff inputVertices finalVertices
                         |> Expect.equalSets Set.empty
-            , fuzz2 (Fuzz.list vertexFuzzer) (Fuzz.list edgeFuzzer) "resulting graph contains all the given edges" <|
+            , fuzz2 (Fuzz.list vertexFuzzer) edgeListFuzzer "resulting graph contains all the given edges" <|
                 \vertices edges ->
                     let
-                        finalEdges : Set ( String, String )
+                        finalEdges : Set ( String, String, Int )
                         finalEdges =
                             Graph.fromVerticesAndEdges vertices edges
                                 |> Graph.edges
                                 |> List.map Graph.edgeToComparable
                                 |> Set.fromList
 
-                        inputEdges : Set ( String, String )
+                        inputEdges : Set ( String, String, Int )
                         inputEdges =
                             edges
                                 |> List.map Graph.edgeToComparable
@@ -317,11 +358,19 @@ suite =
                         |> Expect.true ""
             , msgTest "results in hasEdge = True" app msgFuzzers.addEdge <|
                 \_ msg finalGraph ->
-                    Graph.hasEdge (edgeInMsg msg) finalGraph
+                    let
+                        { from, to } =
+                            edgeInMsg msg
+                    in
+                    Graph.hasEdge from to finalGraph
                         |> Expect.true ""
             , msgTest "does nothing if the edge is already present" app msgFuzzers.addEdge <|
                 \initGraph msg finalGraph ->
-                    if Graph.hasEdge (edgeInMsg msg) initGraph then
+                    let
+                        { from, to } =
+                            edgeInMsg msg
+                    in
+                    if Graph.hasEdge from to initGraph then
                         finalGraph
                             |> Expect.equal initGraph
 
@@ -331,7 +380,11 @@ suite =
         , describe "removeEdge"
             [ msgTest "results in hasEdge == False" app msgFuzzers.removeEdge <|
                 \_ msg finalGraph ->
-                    Graph.hasEdge (edgeInMsg msg) finalGraph
+                    let
+                        { from, to } =
+                            edgeInMsg msg
+                    in
+                    Graph.hasEdge from to finalGraph
                         |> Expect.false ""
             , msgTest "makes the edge not visible in `edges`" app msgFuzzers.removeEdge <|
                 \_ msg finalGraph ->
@@ -340,20 +393,39 @@ suite =
                         |> Expect.false ""
             , msgTest "does nothing if the edge is not present" app msgFuzzers.removeEdge <|
                 \initGraph msg finalGraph ->
-                    if Graph.hasEdge (edgeInMsg msg) initGraph then
+                    let
+                        { from, to } =
+                            edgeInMsg msg
+                    in
+                    if Graph.hasEdge from to initGraph then
                         Expect.pass
 
                     else
                         finalGraph
                             |> Expect.equal initGraph
             ]
-        , describe "map"
+        , describe "updateEdge"
+            [ msgTest "the new edge has the new data if initial edge was present" app msgFuzzers.updateEdge <|
+                \initGraph msg finalGraph ->
+                    let
+                        { from, to, data } =
+                            edgeInMsg msg
+                    in
+                    if Graph.hasEdge from to initGraph then
+                        Graph.getEdge from to finalGraph
+                            |> Expect.equal (Just data)
+
+                    else
+                        finalGraph
+                            |> Expect.equal initGraph
+            ]
+        , describe "mapEdges"
             [ test "usecase" <|
                 \() ->
-                    graphWithFooBar
-                        |> Graph.map String.toUpper
-                        |> Graph.vertices
-                        |> Expect.equal [ "FOO", "BAR" ]
+                    graphWithFooBarWithEdge
+                        |> Graph.mapEdges (\v -> v + 1000)
+                        |> Graph.edges
+                        |> Expect.equal [ { from = "foo", to = "bar", data = 1100 } ]
             ]
         , describe "reverseEdges"
             [ invariantTest "reverses all edges" app <|
@@ -374,7 +446,7 @@ suite =
                     in
                     edgesAfterReversing
                         |> Expect.equalSets
-                            (initialEdges |> Set.map (\( from, to ) -> ( to, from )))
+                            (initialEdges |> Set.map (\( from, to, data ) -> ( to, from, data )))
             ]
         , describe "isEmpty"
             [ invariantTest "only True if no vertices" app <|
@@ -399,23 +471,23 @@ suite =
         , describe "hasEdge"
             [ test "returns True if the edge is present" <|
                 \() ->
-                    Graph.hasEdge { from = "foo", to = "bar" } graphWithFooBarWithEdge
+                    Graph.hasEdge "foo" "bar" graphWithFooBarWithEdge
                         |> Expect.true ""
             , test "returns False if the `from` vertex is not present" <|
                 \() ->
-                    Graph.hasEdge { from = "foo", to = "bar" } Graph.empty
+                    Graph.hasEdge "foo" "bar" Graph.empty
                         |> Expect.false ""
             , test "returns False if the `to` vertex is not present" <|
                 \() ->
-                    Graph.hasEdge { from = "foo", to = "baz" } graphWithFooBarWithEdge
+                    Graph.hasEdge "foo" "baz" graphWithFooBarWithEdge
                         |> Expect.false ""
             , test "returns False if the edge is not present" <|
                 \() ->
-                    Graph.hasEdge { from = "foo", to = "bar" } graphWithFooBar
+                    Graph.hasEdge "foo" "bar" graphWithFooBar
                         |> Expect.false ""
             , test "returns False if the edge is in wrong direction" <|
                 \() ->
-                    Graph.hasEdge { from = "foo", to = "bar" } graphWithFooBarWithReverseEdge
+                    Graph.hasEdge "foo" "bar" graphWithFooBarWithReverseEdge
                         |> Expect.false ""
             , invariantTest "hasEdge implies hasVertex" app <|
                 \_ _ finalGraph ->
@@ -428,7 +500,7 @@ suite =
                             (\vs ->
                                 case vs of
                                     [ v1, v2 ] ->
-                                        if Graph.hasEdge { from = v1, to = v2 } finalGraph then
+                                        if Graph.hasEdge v1 v2 finalGraph then
                                             Graph.hasVertex v1 finalGraph
                                                 && Graph.hasVertex v2 finalGraph
 
@@ -470,7 +542,7 @@ suite =
                             (\vs ->
                                 case vs of
                                     [ v1, v2 ] ->
-                                        if Graph.hasEdge { from = v1, to = v2 } finalGraph then
+                                        if Graph.hasEdge v1 v2 finalGraph then
                                             Graph.areAdjacent v1 v2 finalGraph
 
                                         else
@@ -531,18 +603,18 @@ suite =
             , test "works for graph with one edge" <|
                 \() ->
                     Graph.edges graphWithFooBarWithEdge
-                        |> Expect.equalLists [ { from = "foo", to = "bar" } ]
+                        |> Expect.equalLists [ { from = "foo", to = "bar", data = 100 } ]
             , test "works for graph with two edges" <|
                 \() ->
                     Graph.empty
-                        |> Graph.addEdge "foo" "bar"
-                        |> Graph.addEdge "bar" "baz"
+                        |> Graph.addEdge "foo" "bar" 100
+                        |> Graph.addEdge "bar" "baz" 200
                         |> Graph.edges
                         |> List.map Graph.edgeToComparable
                         |> Set.fromList
                         |> Expect.equalSets
-                            ([ { from = "foo", to = "bar" }
-                             , { from = "bar", to = "baz" }
+                            ([ { from = "foo", to = "bar", data = 100 }
+                             , { from = "bar", to = "baz", data = 200 }
                              ]
                                 |> List.map Graph.edgeToComparable
                                 |> Set.fromList
@@ -561,37 +633,46 @@ suite =
                             , Graph.edges finalGraph
                             )
             ]
-        , describe "outgoingEdges"
+        , describe "outgoingEdgesWithData"
             [ test "returns empty list if vertex isn't present" <|
                 \() ->
-                    Graph.outgoingEdges "foo" Graph.empty
+                    Graph.outgoingEdgesWithData "foo" Graph.empty
                         |> Expect.equalLists []
             , test "returns empty list if vertex has no edges" <|
                 \() ->
-                    Graph.outgoingEdges "foo" graphWithFoo
+                    Graph.outgoingEdgesWithData "foo" graphWithFoo
                         |> Expect.equalLists []
             , test "returns a list of edges if vertex has them" <|
                 \() ->
-                    Graph.outgoingEdges "foo" graphWithFooBarWithEdge
-                        |> Expect.equalLists [ "bar" ]
+                    Graph.outgoingEdgesWithData "foo" graphWithFooBarWithEdge
+                        |> Expect.equalLists [ ( "bar", 100 ) ]
             , test "is directed" <|
                 \() ->
-                    Graph.outgoingEdges "foo" graphWithFooBarWithReverseEdge
+                    Graph.outgoingEdgesWithData "foo" graphWithFooBarWithReverseEdge
                         |> Expect.equalLists []
             ]
+        , describe "outgoingEdges"
+            [ invariantTest "same as outgoingEdgesWithData without the data" app <|
+                \_ _ finalGraph ->
+                    Graph.outgoingEdges "foo" finalGraph
+                        |> Expect.equalLists
+                            (Graph.outgoingEdgesWithData "foo" finalGraph
+                                |> List.map (\( to, data ) -> to)
+                            )
+            ]
         , describe "edgeToComparable"
-            [ fuzz edgeFuzzer "from is on the left" <|
+            [ fuzz edgeFuzzer "from is the first" <|
                 \({ from } as edge) ->
                     let
-                        ( from_, _ ) =
+                        ( from_, _, _ ) =
                             Graph.edgeToComparable edge
                     in
                     from_
                         |> Expect.equal from
-            , fuzz edgeFuzzer "to is on the right" <|
+            , fuzz edgeFuzzer "to is the second" <|
                 \({ to } as edge) ->
                     let
-                        ( _, to_ ) =
+                        ( _, to_, _ ) =
                             Graph.edgeToComparable edge
                     in
                     to_
@@ -628,7 +709,7 @@ updatedVertexInMsg msg =
             ""
 
 
-edgeInMsg : Msg -> Edge String
+edgeInMsg : Msg -> Edge String Int
 edgeInMsg msg =
     case msg of
         AddEdge edge ->
@@ -639,4 +720,4 @@ edgeInMsg msg =
 
         _ ->
             -- shouldn't happen
-            { from = "", to = "" }
+            { from = "", to = "", data = 0 }
