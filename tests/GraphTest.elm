@@ -38,6 +38,12 @@ graphWithFooBarWithReverseEdge =
         |> Graph.addEdge "bar" "foo" 200
 
 
+graphWithLoop : Graph String Int
+graphWithLoop =
+    Graph.empty
+        |> Graph.addEdge "foo" "foo" 100
+
+
 
 -- ARCHITECTURE TEST STUFF
 
@@ -57,7 +63,7 @@ type Msg
 
 app : ArchitectureTest.TestedApp Model Msg
 app =
-    { model = ArchitectureTest.FuzzedModel modelFuzzer
+    { model = ArchitectureTest.FuzzedModel initModelFuzzer
     , update = ArchitectureTest.UpdateWithoutCmds update
     , msgFuzzer = msgFuzzer
     , msgToString = Debug.toString
@@ -75,8 +81,7 @@ update msg graph =
             Graph.removeVertex vertex graph
 
         UpdateVertex before after ->
-            -- in this case more like `setVertex` but it shouldn't matter to the tests...
-            Graph.updateVertex before (always after) graph
+            Graph.updateVertex before ((++) after) graph
 
         AddEdge { from, to, data } ->
             Graph.addEdge from to data graph
@@ -85,8 +90,7 @@ update msg graph =
             Graph.removeEdge from to graph
 
         UpdateEdge { from, to, data } ->
-            -- in this case more like `setEdge` but it shouldn't matter to the tests...
-            Graph.updateEdge from to (always data) graph
+            Graph.updateEdge from to ((+) data) graph
 
 
 modelToString : Model -> String
@@ -114,8 +118,8 @@ edgeToString { from, to, data } =
         ++ Debug.toString data
 
 
-modelFuzzer : Fuzzer (Graph String Int)
-modelFuzzer =
+initModelFuzzer : Fuzzer (Graph String Int)
+initModelFuzzer =
     Fuzz.oneOf
         [ Fuzz.constant Graph.empty
         , Fuzz.constant graphWithFoo
@@ -124,6 +128,13 @@ modelFuzzer =
         , Fuzz.constant graphWithFooBarWithReverseEdge
         , Fuzz.map2 Graph.fromVerticesAndEdges (Fuzz.list vertexFuzzer) (Fuzz.list edgeFuzzer)
         ]
+
+
+{-| Start with initModelFuzzer, add random Msgs, return the final model
+-}
+graphFuzzer : Fuzzer (Graph String Int)
+graphFuzzer =
+    ArchitectureTest.modelFuzzer app
 
 
 vertexFuzzer : Fuzzer String
@@ -461,6 +472,12 @@ suite =
                     edgesAfterReversing
                         |> Expect.equalSets
                             (initialEdges |> Set.map (\( from, to, data ) -> ( to, from, data )))
+            , invariantTest "is its own inverse" app <|
+                \_ _ finalGraph ->
+                    finalGraph
+                        |> Graph.reverseEdges
+                        |> Graph.reverseEdges
+                        |> Expect.equal finalGraph
             ]
         , describe "isEmpty"
             [ invariantTest "only True if no vertices" app <|
@@ -647,6 +664,20 @@ suite =
                             , Graph.edges finalGraph
                             )
             ]
+        , describe "outdegree" <|
+            [ fuzz2 vertexFuzzer graphFuzzer "same number as length of outgoingEdges" <|
+                \vertex graph ->
+                    Graph.outdegree vertex graph
+                        |> Expect.equal (List.length (Graph.outgoingEdges vertex graph))
+            ]
+        , describe "indegree" <|
+            [ fuzz2 vertexFuzzer graphFuzzer "same number as length of incomingEdges" <|
+                \vertex graph ->
+                    Graph.indegree vertex graph
+                        |> Expect.equal (List.length (Graph.incomingEdges vertex graph))
+            ]
+        , todo "incomingEdges"
+        , todo "incomingEdgesWithData"
         , describe "outgoingEdgesWithData"
             [ test "returns empty list if vertex isn't present" <|
                 \() ->
