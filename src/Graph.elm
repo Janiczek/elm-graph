@@ -70,6 +70,8 @@ type Graph vertex edge
         -- TODO maybe use elm-community/intdict too
         { edges : MultiBiDict Int Int
         , edgeData : Dict ( Int, Int ) edge
+
+        -- TODO maybe use BiDict for vertices too?
         , vertices : Dict vertex Int
         , verticesById : Dict Int vertex
         , unusedId : Int
@@ -256,7 +258,7 @@ outdegree vertex (Graph g) =
 indegree : vertex -> Graph vertex edge -> Int
 indegree vertex (Graph g) =
     Dict.get vertex g.vertices
-        |> Maybe.map (\vertexId -> MultiBiDict.getReverse vertexId g.edges |> Set.size)
+        |> Maybe.map (\toId -> MultiBiDict.getReverse toId g.edges |> Set.size)
         |> Maybe.withDefault 0
 
 
@@ -345,10 +347,10 @@ incomingEdges : vertex -> Graph vertex edge -> List vertex
 incomingEdges vertex (Graph g) =
     Dict.get vertex g.vertices
         |> Maybe.andThen
-            (\fromId ->
-                MultiBiDict.get fromId g.edges
+            (\toId ->
+                MultiBiDict.getReverse toId g.edges
                     |> Set.toList
-                    |> List.map (\toId -> Dict.get toId g.verticesById)
+                    |> List.map (\fromId -> Dict.get fromId g.verticesById)
                     |> Maybe.Extra.combine
             )
         |> Maybe.withDefault []
@@ -374,13 +376,13 @@ incomingEdgesWithData : vertex -> Graph vertex edge -> List ( vertex, edge )
 incomingEdgesWithData vertex (Graph g) =
     Dict.get vertex g.vertices
         |> Maybe.andThen
-            (\fromId ->
-                MultiBiDict.get fromId g.edges
+            (\toId ->
+                MultiBiDict.getReverse toId g.edges
                     |> Set.toList
                     |> List.map
-                        (\toId ->
+                        (\fromId ->
                             Maybe.map2 Tuple.pair
-                                (Dict.get toId g.verticesById)
+                                (Dict.get fromId g.verticesById)
                                 (Dict.get ( fromId, toId ) g.edgeData)
                         )
                     |> Maybe.Extra.combine
@@ -536,7 +538,11 @@ removeEdge : vertex -> vertex -> Graph vertex edge -> Graph vertex edge
 removeEdge from to ((Graph g) as graph) =
     Maybe.map2
         (\fromId toId ->
-            Graph { g | edges = MultiBiDict.update fromId (Set.remove toId) g.edges }
+            Graph
+                { g
+                    | edges = MultiBiDict.update fromId (Set.remove toId) g.edges
+                    , edgeData = Dict.remove ( fromId, toId ) g.edgeData
+                }
         )
         (Dict.get from g.vertices)
         (Dict.get to g.vertices)
@@ -629,6 +635,11 @@ reverseEdges (Graph g) =
                 g.edges
                     |> MultiBiDict.toReverseList
                     |> MultiBiDict.fromList
+            , edgeData =
+                g.edgeData
+                    |> Dict.toList
+                    |> List.map (\( ( from, to ), data ) -> ( ( to, from ), data ))
+                    |> Dict.fromList
         }
 
 

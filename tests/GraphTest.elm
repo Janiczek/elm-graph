@@ -55,10 +55,10 @@ type alias Model =
 type Msg
     = AddVertex String
     | RemoveVertex String
-    | UpdateVertex String String
+    | UpdateVertexAppend String String
     | AddEdge (Edge String Int)
     | RemoveEdge (Edge String Int)
-    | UpdateEdge (Edge String Int)
+    | UpdateEdgeAdd (Edge String Int)
 
 
 app : ArchitectureTest.TestedApp Model Msg
@@ -80,7 +80,7 @@ update msg graph =
         RemoveVertex vertex ->
             Graph.removeVertex vertex graph
 
-        UpdateVertex before after ->
+        UpdateVertexAppend before after ->
             Graph.updateVertex before ((++) after) graph
 
         AddEdge { from, to, data } ->
@@ -89,7 +89,7 @@ update msg graph =
         RemoveEdge { from, to } ->
             Graph.removeEdge from to graph
 
-        UpdateEdge { from, to, data } ->
+        UpdateEdgeAdd { from, to, data } ->
             Graph.updateEdge from to ((+) data) graph
 
 
@@ -182,10 +182,10 @@ edgeListFuzzer =
 msgFuzzers =
     { addVertex = Fuzz.map AddVertex vertexFuzzer
     , removeVertex = Fuzz.map RemoveVertex vertexFuzzer
-    , updateVertex = Fuzz.map2 UpdateVertex vertexFuzzer vertexFuzzer
+    , updateVertexAppend = Fuzz.map2 UpdateVertexAppend vertexFuzzer vertexFuzzer
     , addEdge = Fuzz.map AddEdge edgeFuzzer
     , removeEdge = Fuzz.map RemoveEdge edgeFuzzer
-    , updateEdge = Fuzz.map UpdateEdge edgeFuzzer
+    , updateEdgeAdd = Fuzz.map UpdateEdgeAdd edgeFuzzer
     }
 
 
@@ -194,10 +194,10 @@ msgFuzzer =
     Fuzz.oneOf
         [ msgFuzzers.addVertex
         , msgFuzzers.removeVertex
-        , msgFuzzers.updateVertex
+        , msgFuzzers.updateVertexAppend
         , msgFuzzers.addEdge
         , msgFuzzers.removeEdge
-        , msgFuzzers.updateEdge
+        , msgFuzzers.updateEdgeAdd
         ]
 
 
@@ -333,7 +333,7 @@ suite =
                             |> Expect.equal initGraph
             ]
         , describe "updateVertex"
-            [ msgTest "results in hasVertex updated == True if initial vertex was present" app msgFuzzers.updateVertex <|
+            [ msgTest "results in hasVertex updated == True if initial vertex was present" app msgFuzzers.updateVertexAppend <|
                 \initGraph msg finalGraph ->
                     let
                         vertex =
@@ -343,7 +343,7 @@ suite =
                             updatedVertexInMsg msg
                     in
                     if Graph.hasVertex vertex initGraph then
-                        Graph.hasVertex updatedVertex finalGraph
+                        Graph.hasVertex (updatedVertex ++ vertex) finalGraph
                             |> Expect.true ""
 
                     else
@@ -375,15 +375,15 @@ suite =
                     in
                     Graph.hasEdge from to finalGraph
                         |> Expect.true ""
-            , msgTest "does nothing if the edge is already present" app msgFuzzers.addEdge <|
+            , msgTest "updates the edge value if the edge is already present" app msgFuzzers.addEdge <|
                 \initGraph msg finalGraph ->
                     let
-                        { from, to } =
+                        { from, to, data } =
                             edgeInMsg msg
                     in
                     if Graph.hasEdge from to initGraph then
-                        finalGraph
-                            |> Expect.equal initGraph
+                        Graph.getEdge from to finalGraph
+                            |> Expect.equal (Just data)
 
                     else
                         Expect.pass
@@ -416,7 +416,7 @@ suite =
                             |> Expect.equal initGraph
             ]
         , describe "updateEdge"
-            [ msgTest "if old graph has the edge, the new graph has the edge" app msgFuzzers.updateEdge <|
+            [ msgTest "if old graph has the edge, the new graph has the edge" app msgFuzzers.updateEdgeAdd <|
                 \initGraph msg finalGraph ->
                     let
                         { from, to } =
@@ -429,7 +429,7 @@ suite =
                     else
                         Expect.pass
 
-            {- msgTest "[TODO: THIS ERRORS IN THE WEIRDEST (WRONG) WAYS] the new edge has the new data if initial edge was present" app msgFuzzers.updateEdge <|
+            {- msgTest "[TODO: THIS ERRORS IN THE WEIRDEST (WRONG) WAYS] the new edge has the new data if initial edge was present" app msgFuzzers.updateEdgeAdd <|
                \initGraph msg finalGraph ->
                    let
                        { from, to, data } =
@@ -477,7 +477,7 @@ suite =
                     finalGraph
                         |> Graph.reverseEdges
                         |> Graph.reverseEdges
-                        |> Expect.equal finalGraph
+                        |> expectEqualToGraph finalGraph
             ]
         , describe "isEmpty"
             [ invariantTest "only True if no vertices" app <|
@@ -735,7 +735,7 @@ vertexInMsg msg =
         RemoveVertex vertex ->
             vertex
 
-        UpdateVertex vertex _ ->
+        UpdateVertexAppend vertex _ ->
             vertex
 
         _ ->
@@ -746,7 +746,7 @@ vertexInMsg msg =
 updatedVertexInMsg : Msg -> String
 updatedVertexInMsg msg =
     case msg of
-        UpdateVertex _ vertex ->
+        UpdateVertexAppend _ vertex ->
             vertex
 
         _ ->
@@ -766,3 +766,16 @@ edgeInMsg msg =
         _ ->
             -- shouldn't happen
             { from = "", to = "", data = 0 }
+
+
+expectEqualToGraph : Graph String Int -> Graph String Int -> Expectation
+expectEqualToGraph expected actual =
+    let
+        e =
+            Graph.verticesAndEdges expected
+
+        a =
+            Graph.verticesAndEdges actual
+    in
+    ( a.vertices, Set.fromList <| List.map Graph.edgeToComparable a.edges )
+        |> Expect.equal ( e.vertices, Set.fromList <| List.map Graph.edgeToComparable e.edges )
