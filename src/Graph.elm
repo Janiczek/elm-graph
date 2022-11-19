@@ -581,16 +581,18 @@ updateEdge from to fn ((Graph g) as graph) =
 
 -}
 mapVertices : (vertex1 -> vertex2) -> Graph vertex1 edge -> Graph vertex2 edge
-mapVertices fn (Graph g) =
-    Graph
-        { edges = g.edges
-        , edgeData = g.edgeData
-
-        -- TODO better transition from vertices to verticesById or vice versa? (via some "swap" function?)
-        , verticesById = Dict.map (always fn) g.verticesById
-        , vertices = DictExtra.mapKeys fn g.vertices
-        , unusedId = g.unusedId
-        }
+mapVertices fn graph =
+    fromVerticesAndEdges
+        (List.map fn (vertices graph))
+        (List.map
+            (\e ->
+                { from = fn e.from
+                , to = fn e.to
+                , data = e.data
+                }
+            )
+            (edges graph)
+        )
 
 
 {-| Applies a function to all the edges.
